@@ -8,4 +8,6 @@ router.post("/", todoController.createTodo);
 router.put("/:id", todoController.updateTodo);
 router.delete("/:id", todoController.deleteTodo);
 
+router.get("/:taskId/resume", todoController.resumeTask);
+
 module.exports = router;

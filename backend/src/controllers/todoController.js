@@ -1,6 +1,31 @@
 const todoService = require("../services/todoService");
 
+
+
+exports.resumeTask = async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const task = await todoService.getTodoById(taskId);
+
+        if (!task) return res.status(404).json({ message: "Task not found" });
+
+        // Sort by lastOpened (newest first)
+        const recentFiles = task.files.sort((a, b) => new Date(b.lastOpened) - new Date(a.lastOpened));
+
+        res.json({
+            taskId: task._id,
+            title: task.title,
+            files: recentFiles
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+
 // Get all todos
+
+
 exports.getTodos = async (req, res) => {
     try {
         const todos = await todoService.getTodos();
