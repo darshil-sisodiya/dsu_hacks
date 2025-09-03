@@ -1,5 +1,6 @@
 const express = require("express");
 const { getSlackTasks, fetchSlackMessages } = require("../../Slackservice");
+const SlackSummaryService = require("../services/SlackSummaryService");
 const router = express.Router();
 
 // Webhook endpoint to receive Slack messages
@@ -51,6 +52,48 @@ router.get("/tasks", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch Slack tasks" });
+  }
+});
+
+// New endpoint to generate AI summaries of Slack content
+router.get("/summary", async (req, res) => {
+  const { channel, channelName = "Slack" } = req.query;
+  if (!channel) return res.status(400).json({ error: "Missing channel id" });
+
+  try {
+    console.log("🤖 Generating AI summary for channel:", channel);
+    
+    // Initialize the summary service
+    const summaryService = new SlackSummaryService();
+    
+    // Fetch messages and tasks
+    const messages = await fetchSlackMessages(channel);
+    const tasks = await getSlackTasks(channel);
+    
+    console.log(`📊 Found ${messages.length} messages and ${tasks.length} tasks`);
+    
+    // Generate comprehensive summary
+    const summary = await summaryService.generateComprehensiveSummary(
+      messages, 
+      tasks, 
+      channelName
+    );
+    
+    res.json({
+      channel,
+      channelName,
+      messageCount: messages.length,
+      taskCount: tasks.length,
+      summary: summary,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (err) {
+    console.error("❌ Error generating summary:", err);
+    res.status(500).json({ 
+      error: "Failed to generate summary", 
+      details: err.message 
+    });
   }
 });
 
