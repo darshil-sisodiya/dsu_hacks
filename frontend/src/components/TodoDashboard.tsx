@@ -5,7 +5,7 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
 import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume } from "../lib/todos";
 import { poppins } from "../fonts";
-import SessionRestoreDialog from "./SessionRestoreDialog";
+
 
 declare global {
   interface Window {
@@ -135,14 +135,20 @@ export default function TodoDashboard() {
   }
 
   async function onDelete(todo: Todo) {
-    try {
-      await deleteTodo(todo._id);
-      setTodos(prev => prev.filter(t => t._id !== todo._id));
-      if (selectedId === todo._id) setSelectedId(null);
-    } catch (e: any) {
-      setError(e?.message || "Failed to delete");
-    }
+  try {
+    await deleteTodo(todo._id);
+    setTodos(prev => prev.filter(t => t._id !== todo._id));
+
+    // Clear selection and active task if deleted
+    if (selectedId === todo._id) setSelectedId(null);
+    if (activeTaskId === todo._id) setActiveTaskId(null);
+    if (taskPosition && selectedId === todo._id) setTaskPosition(null);
+
+  } catch (e: any) {
+    setError(e?.message || "Failed to delete");
   }
+}
+
 
   // Inside your TodoDashboard component
 
@@ -179,12 +185,18 @@ const handleLogout = () => {
       if (r.files && r.files.length > 0) {
         // Show the restore dialog
         setRestoreData({
-          taskId,
-          taskTitle: r.title || selected?.title || 'Unknown Task',
-          files: r.files,
-          lastSession: r.lastSession,
-          totalFiles: r.totalFiles
-        });
+  taskId,
+  taskTitle: r.title || selected?.title || 'Unknown Task',
+  files: r.files || [],
+  lastSession: r.files?.length 
+      ? r.files.reduce((latest, f) => {
+          const fDate = f.lastOpened ? new Date(f.lastOpened) : new Date(0);
+          return fDate > latest ? fDate : latest;
+        }, new Date(0)).toISOString()
+      : null,
+  totalFiles: r.files?.length || 0
+});
+
         setShowRestoreDialog(true);
       } else {
         setError('No files found for this task session.');
@@ -239,14 +251,16 @@ const handleLogout = () => {
     <div className={`${poppins.className} flex flex-col min-h-screen bg-gray-50 text-gray-900 relative`}>
       
       {/* Blur overlay */}
-      {selectedId && taskPosition && (
-        <motion.div
-          initial={{ clipPath: `circle(0px at ${taskPosition.x + taskPosition.width / 2}px ${taskPosition.y + taskPosition.height / 2}px)` }}
-          animate={{ clipPath: `circle(200% at ${taskPosition.x + taskPosition.width / 2}px ${taskPosition.y + taskPosition.height / 2}px)` }}
-          transition={{ duration: 0.6, ease: "easeInOut" }}
-          className="fixed inset-0 bg-white backdrop-blur-md z-10 pointer-events-none"
-        />
-      )}
+{activeTaskId && taskPosition && (
+  <motion.div
+    initial={{ clipPath: `circle(0px at ${taskPosition.x + taskPosition.width / 2}px ${taskPosition.y + taskPosition.height / 2}px)` }}
+    animate={{ clipPath: `circle(200% at ${taskPosition.x + taskPosition.width / 2}px ${taskPosition.y + taskPosition.height / 2}px)` }}
+    exit={{ clipPath: `circle(0px at ${taskPosition.x + taskPosition.width / 2}px ${taskPosition.y + taskPosition.height / 2}px)` }}
+    transition={{ duration: 0.6, ease: "easeInOut" }}
+    className="fixed inset-0 bg-white backdrop-blur-md z-10 pointer-events-none"
+  />
+)}
+
 
       <motion.header
   initial={{ y: -30, opacity: 0 }}
@@ -393,14 +407,70 @@ const handleLogout = () => {
       </motion.main>
 
       {/* Session Restore Dialog */}
-      <SessionRestoreDialog
-        isOpen={showRestoreDialog}
-        onClose={() => setShowRestoreDialog(false)}
-        taskTitle={restoreData?.taskTitle || ''}
-        files={restoreData?.files || []}
-        lastSession={restoreData?.lastSession}
-        onRestore={onRestoreFiles}
-      />
+      {/* Session Restore Dialog with premium minimalistic design and animations */}
+<AnimatePresence>
+  {showRestoreDialog && restoreData && (
+    <motion.div
+      key="session-restore-dialog"
+      initial={{ opacity: 0, y: -50, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 50, scale: 0.95 }}
+      transition={{ duration: 0.35, ease: "easeInOut" }}
+      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/30"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.3, ease: "easeInOut" }}
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl max-w-lg w-full p-6 flex flex-col gap-4"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          Restore Session: {restoreData.taskTitle}
+        </h3>
+        {restoreData.lastSession && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Last session: {new Date(restoreData.lastSession).toLocaleString()}
+          </p>
+        )}
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {restoreData.totalFiles || 0} files available
+        </p>
+
+        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto border-t border-gray-200 dark:border-gray-700 pt-2">
+          {restoreData.files.map((file: any, index: number) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.25, delay: index * 0.05 }}
+              className="text-gray-700 dark:text-gray-300 text-sm truncate px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+            >
+              {file.path}
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4">
+          <button
+            onClick={() => setShowRestoreDialog(false)}
+            className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onRestoreFiles(restoreData.files.map((f: any) => f.path))}
+            className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition"
+          >
+            Restore All
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
     </div>
   );
 }
