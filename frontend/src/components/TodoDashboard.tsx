@@ -3,16 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
-import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, trackFile, getResume } from "../lib/todos";
+import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume } from "../lib/todos";
 
 declare global {
   interface Window {
     taskAPI?: {
-      start: (taskId: string) => Promise<any>;
+      start: (taskId: string, token: string) => Promise<any>;
       end: (taskId: string) => Promise<any>;
-      openFile: (taskId: string, filePath: string) => Promise<any>;
       resumeOpen: (taskId: string, files: Array<{ path: string } | string>) => Promise<any>;
-      pickFiles: () => Promise<{ paths: string[] } | null>;
+      onFileTracked: (callback: (event: any, data: { taskId: string; path: string }) => void) => void;
     };
   }
 }
@@ -91,7 +90,21 @@ export default function TodoDashboard() {
 
   async function onStartTask(taskId: string) {
     setActiveTaskId(taskId);
-    if (window.taskAPI) await window.taskAPI.start(taskId);
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      return;
+    }
+    if (window.taskAPI) {
+      await window.taskAPI.start(taskId, token);
+      // Set up automatic file tracking listener
+      window.taskAPI.onFileTracked((event, data) => {
+        if (data.taskId === taskId) {
+          // Refresh the recent files list when a new file is tracked
+          loadRecent(taskId);
+        }
+      });
+    }
   }
 
   async function onEndTask(taskId: string) {
@@ -99,40 +112,7 @@ export default function TodoDashboard() {
     setActiveTaskId(null);
   }
 
-  async function onPickAndOpenFile(taskId: string) {
-    // Prefer Electron's native picker for absolute paths
-    if (window.taskAPI?.pickFiles) {
-      const res = await window.taskAPI.pickFiles();
-      const paths: string[] = (res && res.paths) || [];
-      for (const p of paths) {
-        if (p) {
-          if (window.taskAPI) await window.taskAPI.openFile(taskId, p);
-          try { await trackFile(taskId, p); } catch {}
-          await new Promise(r => setTimeout(r, 200));
-        }
-      }
-      await loadRecent(taskId);
-      return;
-    }
 
-    // Fallback to browser input (may lack absolute path)
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.onchange = async () => {
-      const files = Array.from(input.files || []);
-      for (const f of files) {
-        const filepath = (f as any).path || f.name;
-        if (window.taskAPI && filepath) {
-          await window.taskAPI.openFile(taskId, filepath);
-          try { await trackFile(taskId, filepath); } catch {}
-          await new Promise(r => setTimeout(r, 200));
-        }
-      }
-      await loadRecent(taskId);
-    };
-    input.click();
-  }
 
   async function onResume(taskId: string) {
     try {
@@ -256,11 +236,7 @@ export default function TodoDashboard() {
                 )}
 
                 <div className="flex items-center gap-2">
-                  {activeTaskId === selected._id ? (
-                    <button onClick={() => onPickAndOpenFile(selected._id)} className="px-3 py-2 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">Open & Track File</button>
-                  ) : (
-                    <button onClick={() => onResume(selected._id)} className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100">Resume (open recent)</button>
-                  )}
+                  <button onClick={() => onResume(selected._id)} className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100">Resume (open recent)</button>
                 </div>
 
                 {/* Recent Files */}

@@ -12,5 +12,11 @@
   "license": "ISC",
   "devDependencies": {
     "electron": "^38.0.0"
+  },
+  "dependencies": {
+    "active-win": "^9.0.0",
+    "chokidar": "^4.0.3",
+    "node-powershell": "^5.0.1",
+    "windows-shortcuts": "^0.1.6"
   }
 }

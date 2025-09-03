@@ -70,3 +70,17 @@ exports.deleteTodo = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+// Record file opened for a task
+exports.trackFile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { path } = req.body;
+        if (!path) return res.status(400).json({ message: "File path is required" });
+        const updated = await todoService.addOrUpdateFileForUser(id, req.user._id, path);
+        if (!updated) return res.status(404).json({ message: "Todo not found" });
+        res.json(updated);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
