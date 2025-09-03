@@ -77,15 +77,18 @@ class AuthController {
   }
 
   static async getProfile(req, res) {
-    try {
-      res.json({
-        user: req.user
-      });
-    } catch (error) {
-      console.error('Get profile error:', error);
-      res.status(500).json({ message: 'Server error' });
-    }
+  try {
+    res.json({
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
+}
+
 }
 
 module.exports = AuthController;

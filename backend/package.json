@@ -10,6 +10,8 @@
         "test:auth": "node scripts/testAuth.js"
     },
     "dependencies": {
+        "@google-cloud/storage": "^7.17.0",
+        "@google-cloud/vision": "^5.3.3",
         "@google/generative-ai": "^0.24.1",
         "axios": "^1.11.0",
         "bcryptjs": "^2.4.3",
