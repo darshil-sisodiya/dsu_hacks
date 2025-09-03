@@ -14,8 +14,12 @@ exports.summarizeAllFiles = async (req, res) => {
             return res.status(404).json({ message: "No files found for this task" });
         }
 
-        // Filter only files that have a valid path
-        const readableFiles = task.files.filter(file => file.path);
+        // Filter only files that have a valid path and are not .exe files
+        const readableFiles = task.files.filter(file => {
+            if (!file.path) return false;
+            const ext = file.path.toLowerCase().split('.').pop();
+            return ext !== 'exe';
+        });
 
         if (readableFiles.length === 0) {
             return res.status(404).json({ message: "No readable files found" });
