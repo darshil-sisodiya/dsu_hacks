@@ -5,7 +5,8 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const connectDB = require('./src/config/database');
 const authRoutes = require('./src/routes/authRoutes');
-const todoRoutes = require('./src/routes/todoRoutes'); // ✅ Import Todo routes
+const todoRoutes = require('./src/routes/todoRoutes'); 
+const slackRoutes = require('./src/routes/slackRoutes'); // ✅ Import Slack routes
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,7 +21,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/todos', todoRoutes); // ✅ Mount Todo CRUD routes
+app.use('/api/todos', todoRoutes); 
+app.use('/api/slack', slackRoutes); // ✅ Mount Slack routes
 
 // Health check route
 app.get('/health', (req, res) => {
@@ -47,7 +49,6 @@ app.listen(PORT, () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
     console.log(`Error: ${err.message}`);
-    // Close server & exit process
     process.exit(1);
 });
 

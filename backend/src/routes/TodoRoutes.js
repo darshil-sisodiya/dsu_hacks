@@ -13,5 +13,7 @@ router.delete("/:id", todoController.deleteTodo);
 
 router.post("/:id/files/track", todoController.trackFile);
 router.get("/:taskId/resume", todoController.resumeTask);
+// routes/TodoRoutes.js
+router.get("/:id/files/summary", todoController.summarizeRecentFile);
 
 module.exports = router;
