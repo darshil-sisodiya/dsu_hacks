@@ -7,8 +7,19 @@ exports.resumeTask = async (req, res) => {
         const { taskId } = req.params;
         const task = await todoService.getTodoByIdForUser(taskId, req.user._id);
         if (!task) return res.status(404).json({ message: "Task not found" });
-        const recentFiles = task.files.sort((a, b) => new Date(b.lastOpened) - new Date(a.lastOpened));
-        res.json({ taskId: task._id, title: task.title, files: recentFiles });
+        
+        // Sort files by last accessed time (most recent first)
+        const recentFiles = task.files.sort((a, b) => 
+            new Date(b.lastAccessed || b.lastOpened) - new Date(a.lastAccessed || a.lastOpened)
+        );
+        
+        res.json({ 
+            taskId: task._id, 
+            title: task.title, 
+            files: recentFiles,
+            totalFiles: recentFiles.length,
+            lastSession: task.updatedAt
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

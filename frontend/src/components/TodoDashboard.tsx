@@ -5,6 +5,7 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
 import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume } from "../lib/todos";
 import { poppins } from "../fonts";
+import SessionRestoreDialog from "./SessionRestoreDialog";
 
 declare global {
   interface Window {
@@ -28,6 +29,8 @@ export default function TodoDashboard() {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [recentFiles, setRecentFiles] = useState<Array<{ path: string; lastOpened?: string }>>([]);
   const [newFileNotification, setNewFileNotification] = useState<string | null>(null);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [restoreData, setRestoreData] = useState<any>(null);
   const [taskPosition, setTaskPosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
@@ -164,10 +167,43 @@ export default function TodoDashboard() {
   async function onResume(taskId: string) {
     try {
       const r = await getResume(taskId);
+      
+      if (r.files && r.files.length > 0) {
+        // Show the restore dialog
+        setRestoreData({
+          taskId,
+          taskTitle: r.title || selected?.title || 'Unknown Task',
+          files: r.files,
+          lastSession: r.lastSession,
+          totalFiles: r.totalFiles
+        });
+        setShowRestoreDialog(true);
+      } else {
+        setError('No files found for this task session.');
+      }
+      
+      // Update recent files display
       setRecentFiles(r.files || []);
-      if (window.taskAPI) await window.taskAPI.resumeOpen(taskId, r.files || []);
     } catch (e) {
       console.error(e);
+      setError('Failed to load session files.');
+    }
+  }
+
+  async function onRestoreFiles(selectedFilePaths: string[]) {
+    if (!restoreData || !window.taskAPI) return;
+    
+    try {
+      console.log(`🔄 Restoring ${selectedFilePaths.length} files for task ${restoreData.taskId}`);
+      
+      // Open each selected file
+      const filesToOpen = selectedFilePaths.map(path => ({ path }));
+      await window.taskAPI.resumeOpen(restoreData.taskId, filesToOpen);
+      
+      console.log(`✅ Successfully opened ${selectedFilePaths.length} files`);
+    } catch (error) {
+      console.error('Error restoring files:', error);
+      setError('Failed to open some files.');
     }
   }
 
@@ -332,6 +368,16 @@ export default function TodoDashboard() {
           </AnimatePresence>
         </motion.div>
       </motion.main>
+
+      {/* Session Restore Dialog */}
+      <SessionRestoreDialog
+        isOpen={showRestoreDialog}
+        onClose={() => setShowRestoreDialog(false)}
+        taskTitle={restoreData?.taskTitle || ''}
+        files={restoreData?.files || []}
+        lastSession={restoreData?.lastSession}
+        onRestore={onRestoreFiles}
+      />
     </div>
   );
 }
