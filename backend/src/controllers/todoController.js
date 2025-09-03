@@ -1,5 +1,35 @@
 const todoService = require("../services/todoService");
 
+// controllers/todoController.js
+const Todo = require("../models/todoModel");
+const { summarizeFile } = require("../services/geminiService");
+
+// ✅ NEW: summarize recent file for a task
+exports.summarizeRecentFile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const task = await Todo.findOne({ _id: id, userId: req.user._id });
+
+        if (!task || !task.files || task.files.length === 0) {
+            return res.status(404).json({ message: "No files found for this task" });
+        }
+
+        // Pick the most recently opened file
+        const recentFile = task.files.sort(
+            (a, b) => new Date(b.lastOpened) - new Date(a.lastOpened)
+        )[0];
+
+        const summary = await summarizeFile(recentFile.path);
+
+        res.json({
+            file: recentFile.path,
+            summary,
+        });
+    } catch (error) {
+        console.error("Summarization controller error:", error);
+        res.status(500).json({ message: "Server error while summarizing file" });
+    }
+};
 
 
 exports.resumeTask = async (req, res) => {
