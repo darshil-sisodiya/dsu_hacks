@@ -22,6 +22,9 @@ class AuthController {
       if (user) {
         const token = AuthService.generateToken(user._id);
         
+        // Success log for registration
+        console.log(`success ${user.name} with ${user.email} registered`);
+        
         res.status(201).json({
           message: 'User created successfully',
           user: {
@@ -56,6 +59,7 @@ class AuthController {
       
       // Generate token
       const token = AuthService.generateToken(user._id);
+      console.log(`login success ${user.name} with ${user.email}`);
       
       res.json({
         message: 'Login successful',
