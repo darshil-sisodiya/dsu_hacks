@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { FaUserAlt, FaLock, FaEnvelope } from "react-icons/fa";
-import { poppins } from "../fonts"; 
+import { poppins } from "../fonts";
 import { signup as apiSignup, login as apiLogin } from "../lib/api";
 
 export default function LoginSignup() {
@@ -26,6 +26,11 @@ export default function LoginSignup() {
         const res = await apiSignup({ name, email, password });
         setMessage(`Registered ${res.user.name} (${res.user.email})`);
       }
+
+      // reset fields after success
+      setName("");
+      setEmail("");
+      setPassword("");
     } catch (err: any) {
       setMessage(err?.message || "Something went wrong");
     } finally {
@@ -35,7 +40,6 @@ export default function LoginSignup() {
 
   return (
     <div className={`${poppins.className} flex min-h-screen bg-white`}>
-
       {/* Left Side - Branding */}
       <div className="w-1/2 flex items-center justify-center border-r ">
         <h1 className="text-6xl font-extrabold text-gray-800 tracking-tight">
@@ -51,7 +55,7 @@ export default function LoginSignup() {
           animate={{ rotateY: 0, opacity: 1 }}
           exit={{ rotateY: -90, opacity: 0 }}
           transition={{ duration: 0.6, ease: "easeInOut" }}
-          className="w-full max-w-md bg-white rounded-2xl shadow-lg border  p-10"
+          className="w-full max-w-md bg-white rounded-2xl shadow-lg border p-10"
         >
           {/* Header */}
           <h2 className="text-2xl font-semibold text-gray-800 text-center mb-8">
