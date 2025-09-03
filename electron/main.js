@@ -6,25 +6,29 @@ function getBackendBase() {
 	return process.env.BACKEND_URL || 'http://localhost:3001';
 }
 
+function getBackendOriginParts() {
+	try {
+		const u = new URL(getBackendBase());
+		return { protocol: u.protocol, host: u.host };
+	} catch {
+		return { protocol: 'http:', host: 'localhost:3001' };
+	}
+}
+
 function resolveFrontendEntry() {
-	// 1) Env override for dev server
 	const envUrl = process.env.FRONTEND_URL;
 	if (envUrl && /^https?:\/\//.test(envUrl)) {
 		return { type: 'url', value: envUrl };
 	}
-
-	// 2) Common dev default
 	const devUrl = 'http://localhost:3000';
 	return { type: 'url', value: devUrl };
 }
 
 function resolveFrontendBuild() {
-	// Try Vite default
 	const viteIndex = path.resolve(__dirname, '..', 'frontend', 'dist', 'index.html');
 	if (fs.existsSync(viteIndex)) {
 		return viteIndex;
 	}
-	// Try CRA default
 	const craIndex = path.resolve(__dirname, '..', 'frontend', 'build', 'index.html');
 	if (fs.existsSync(craIndex)) {
 		return craIndex;
@@ -33,29 +37,39 @@ function resolveFrontendBuild() {
 }
 
 function setupApiRedirects(win) {
-	const backendBase = getBackendBase();
+	const backendBase = getBackendBase().replace(/\/$/, '');
+	const backendParts = getBackendOriginParts();
 	const filter = { urls: ['*://*/*', 'file://*/*'] };
 	win.webContents.session.webRequest.onBeforeRequest(filter, (details, callback) => {
 		try {
 			const originalUrl = details.url;
-			// Handle both http(s) and file scheme
 			let pathname = '';
+			let targetProtocol = '';
+			let targetHost = '';
+
 			if (originalUrl.startsWith('file://')) {
-				// file scheme: extract path after file:// and look for /api/
 				const idx = originalUrl.indexOf('/api/');
 				if (idx !== -1) {
 					pathname = originalUrl.substring(idx);
 				}
 			} else {
 				const u = new URL(originalUrl);
+				targetProtocol = u.protocol;
+				targetHost = u.host;
 				pathname = u.pathname + (u.search || '');
 			}
 
 			if (pathname.startsWith('/api/')) {
-				const redirectURL = backendBase.replace(/\/$/, '') + pathname;
-				return callback({ redirectURL });
+				// Only redirect if the current request is NOT already pointing at the backend origin
+				const alreadyBackend = targetProtocol === backendParts.protocol && targetHost === backendParts.host;
+				if (!alreadyBackend || originalUrl.startsWith('file://')) {
+					const redirectURL = backendBase + pathname;
+					return callback({ redirectURL });
+				}
 			}
-		} catch (_) {}
+		} catch (err) {
+			console.warn('webRequest interception error:', err);
+		}
 		callback({});
 	});
 }
@@ -83,9 +97,11 @@ function createWindow() {
 
 	loadFrontend(win).catch((err) => {
 		console.error('Failed to load frontend:', err);
-		// Fallback to a simple local page so the window still opens
 		win.loadURL('data:text/html,<h1 style="font-family:system-ui;">Failed to load frontend</h1><p>Start your dev server or build the frontend.</p>');
 	});
+
+	// Optional: open devtools for debugging timeouts
+	// win.webContents.openDevTools({ mode: 'detach' });
 }
 
 app.whenReady().then(() => {
