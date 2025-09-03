@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [timeSaved, setTimeSaved] = useState(0);
   const [efficiency, setEfficiency] = useState(0);
 
-  useEffect(() => {
+useEffect(() => {
   const token = localStorage.getItem("auth_token");
   if (!token) {
     router.replace("/"); // redirect to login
@@ -50,10 +50,20 @@ export default function Dashboard() {
 
       // Count completed tasks
       const totalTasks = todosData.length;
-      const completedTasks = todosData.filter((t: any) => t.completed).length;
-      const completionPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+const completedTasks = todosData.filter((t: any) => t.status === "completed").length;
+const completionPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+setTaskCompletion(completionPercent);
 
-      setTaskCompletion(completionPercent);
+      // ✅ Fetch counter for time saved
+      const counterRes = await fetch("http://localhost:3001/api/counter", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (counterRes.ok) {
+        const counterData = await counterRes.json();
+        console.log("Counter fetched:", counterData); // Debug log
+        setTimeSaved(counterData.timeSaved || 0);
+      }
+
     } catch (err) {
       console.error("Error fetching data:", err);
       localStorage.removeItem("auth_token");
@@ -63,7 +73,7 @@ export default function Dashboard() {
 
   fetchProfileAndTodos();
 
-  // Set date and other stats
+  // Set date
   const today = new Date();
   setCurrentDate(
     today.toLocaleDateString("en-US", {
@@ -72,9 +82,12 @@ export default function Dashboard() {
       day: "numeric",
     })
   );
-  setTimeSaved(120);
+
+  // Set static efficiency for now
   setEfficiency(85);
 }, [router]);
+
+
 
 
 

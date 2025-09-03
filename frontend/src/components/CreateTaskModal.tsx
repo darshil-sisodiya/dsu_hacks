@@ -33,7 +33,7 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
           className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
         >
           <div className="p-6 border-b border-slate-100">
@@ -46,20 +46,20 @@ const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <input
                 type="text"
                 value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
+                onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Enter task title..."
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all placeholder:text-slate-600"
                 autoFocus
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all text-black placeholder:text-slate-400"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
               <textarea
                 value={newDescription}
-                onChange={e => setNewDescription(e.target.value)}
+                onChange={(e) => setNewDescription(e.target.value)}
                 placeholder="Add task description..."
                 rows={3}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none placeholder:text-slate-600"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-none text-black placeholder:text-slate-400"
               />
             </div>
           </div>
