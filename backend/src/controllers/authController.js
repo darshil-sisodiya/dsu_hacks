@@ -5,7 +5,7 @@ class AuthController {
   static async signup(req, res) {
     try {
       const { name, email, password } = req.body;
-      
+       
       // Check if user already exists
       const userExists = await AuthService.findUserByEmail(email);
       if (userExists) {
