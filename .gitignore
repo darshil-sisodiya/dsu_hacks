@@ -2,6 +2,9 @@
 backend/node_modules/
 backend/package-lock.json
 
+electron/node_modules/
+electron/package-lock.json
+
 # Env/secrets
 backend/.env
 
