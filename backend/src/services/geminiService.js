@@ -7,25 +7,31 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function summarizeFile(filePath) {
     try {
-        // Support both absolute and relative paths
+        // Resolve path
         const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
         console.log("Reading file from:", absPath);
 
         const content = await fs.readFile(absPath, "utf-8");
 
         if (!content || content.trim().length === 0) {
-            return "file couldnt b read";
+            return "The file is empty or unreadable.";
         }
 
+        // Limit content size to prevent exceeding token limit (e.g., 10,000 chars)
+        const maxChars = 10000;
+        const trimmedContent = content.length > maxChars 
+            ? content.slice(0, maxChars) + "\n\n[Content truncated for summarization]" 
+            : content;
+
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-        const result = await model.generateContent(
-            'Summarize the following file in plain language:\n\n${content}'
-        );
+
+        const prompt = `Summarize the following text in clear, concise plain language:\n\n${trimmedContent}`;
+        const result = await model.generateContent(prompt);
 
         return result.response.text();
     } catch (err) {
         console.error("Summarization error:", err.message);
-        return "file couldnt b read";
+        return "Error summarizing the file.";
     }
 }
 

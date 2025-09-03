@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const connectDB = require('./src/config/database');
 const authRoutes = require('./src/routes/authRoutes');
-const todoRoutes = require('./src/routes/todoRoutes'); 
+const todoRoutes = require('./src/routes/TodoRoutes'); 
 const slackRoutes = require('./src/routes/slackRoutes'); // ✅ Import Slack routes
 
 const app = express();

@@ -5,7 +5,7 @@ const Todo = require("../models/todoModel");
 const { summarizeFile } = require("../services/geminiService");
 
 // ✅ NEW: summarize recent file for a task
-exports.summarizeRecentFile = async (req, res) => {
+exports.summarizeAllFiles = async (req, res) => {
     try {
         const { id } = req.params;
         const task = await Todo.findOne({ _id: id, userId: req.user._id });
@@ -14,22 +14,42 @@ exports.summarizeRecentFile = async (req, res) => {
             return res.status(404).json({ message: "No files found for this task" });
         }
 
-        // Pick the most recently opened file
-        const recentFile = task.files.sort(
-            (a, b) => new Date(b.lastOpened) - new Date(a.lastOpened)
-        )[0];
+        // Filter only files that have a valid path
+        const readableFiles = task.files.filter(file => file.path);
 
-        const summary = await summarizeFile(recentFile.path);
+        if (readableFiles.length === 0) {
+            return res.status(404).json({ message: "No readable files found" });
+        }
+
+        const summaries = [];
+
+        for (const file of readableFiles) {
+            try {
+                const summary = await summarizeFile(file.path);
+                summaries.push({
+                    file: file.path,
+                    summary
+                });
+            } catch (err) {
+                console.error(`Error summarizing file ${file.path}:`, err.message);
+                summaries.push({
+                    file: file.path,
+                    summary: "Error processing this file"
+                });
+            }
+        }
 
         res.json({
-            file: recentFile.path,
-            summary,
+            taskId: id,
+            summaries
         });
+
     } catch (error) {
         console.error("Summarization controller error:", error);
-        res.status(500).json({ message: "Server error while summarizing file" });
+        res.status(500).json({ message: "Server error while summarizing files" });
     }
 };
+
 
 
 exports.resumeTask = async (req, res) => {
