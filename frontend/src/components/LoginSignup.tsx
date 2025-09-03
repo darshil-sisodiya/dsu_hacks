@@ -3,14 +3,43 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { FaUserAlt, FaLock, FaEnvelope } from "react-icons/fa";
-import { poppins } from "../fonts"; 
+import { poppins } from "../fonts";
+import { signup as apiSignup, login as apiLogin } from "../lib/api";
 
 export default function LoginSignup() {
   const [isLogin, setIsLogin] = useState(true);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage(null);
+    setLoading(true);
+    try {
+      if (isLogin) {
+        const res = await apiLogin({ email, password });
+        setMessage(`Logged in as ${res.user.name} (${res.user.email})`);
+      } else {
+        const res = await apiSignup({ name, email, password });
+        setMessage(`Registered ${res.user.name} (${res.user.email})`);
+      }
+
+      // reset fields after success
+      setName("");
+      setEmail("");
+      setPassword("");
+    } catch (err: any) {
+      setMessage(err?.message || "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className={`${poppins.className} flex min-h-screen bg-white`}>
-
       {/* Left Side - Branding */}
       <div className="w-1/2 flex items-center justify-center border-r ">
         <h1 className="text-6xl font-extrabold text-gray-800 tracking-tight">
@@ -26,7 +55,7 @@ export default function LoginSignup() {
           animate={{ rotateY: 0, opacity: 1 }}
           exit={{ rotateY: -90, opacity: 0 }}
           transition={{ duration: 0.6, ease: "easeInOut" }}
-          className="w-full max-w-md bg-white rounded-2xl shadow-lg border  p-10"
+          className="w-full max-w-md bg-white rounded-2xl shadow-lg border p-10"
         >
           {/* Header */}
           <h2 className="text-2xl font-semibold text-gray-800 text-center mb-8">
@@ -34,7 +63,7 @@ export default function LoginSignup() {
           </h2>
 
           {/* Form */}
-          <form className="space-y-5">
+          <form className="space-y-5" onSubmit={handleSubmit}>
             {/* Signup → Username */}
             {!isLogin && (
               <div className="relative">
@@ -42,6 +71,8 @@ export default function LoginSignup() {
                 <input
                   type="text"
                   placeholder="Username"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-3 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
@@ -53,6 +84,8 @@ export default function LoginSignup() {
               <input
                 type="email"
                 placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-3 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
@@ -63,6 +96,8 @@ export default function LoginSignup() {
               <input
                 type="password"
                 placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-10 pr-3 py-3 rounded-lg bg-gray-50 border border-gray-300 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
@@ -72,11 +107,17 @@ export default function LoginSignup() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               type="submit"
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition"
+              disabled={loading}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition disabled:opacity-60"
             >
-              {isLogin ? "Login" : "Sign Up"}
+              {loading ? "Please wait..." : isLogin ? "Login" : "Sign Up"}
             </motion.button>
           </form>
+
+          {/* Message */}
+          {message && (
+            <p className="mt-4 text-center text-sm text-gray-700">{message}</p>
+          )}
 
           {/* Toggle Auth Mode */}
           <p className="mt-8 text-center text-gray-600 text-sm">
