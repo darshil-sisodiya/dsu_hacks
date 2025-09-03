@@ -162,6 +162,103 @@ router.get("/channel-overview", async (req, res) => {
 });
 
 /**
+ * GET /api/slack-gemini/keyword-search
+ * Search Slack messages by keywords and get AI summary
+ */
+router.get("/keyword-search", async (req, res) => {
+    const { keywords, channel, channelName = "Slack" } = req.query;
+    
+    if (!keywords) {
+        return res.status(400).json({ 
+            error: "Missing keywords parameter", 
+            example: "/api/slack-gemini/keyword-search?keywords=pandas&channel=C123456&channelName=General" 
+        });
+    }
+
+    if (!channel) {
+        return res.status(400).json({ 
+            error: "Missing channel id", 
+            example: "/api/slack-gemini/keyword-search?keywords=pandas&channel=C123456&channelName=General" 
+        });
+    }
+
+    try {
+        console.log(`🔍 Searching messages with keywords: "${keywords}" in channel: ${channel} (${channelName})`);
+        
+        const result = await integrationService.searchMessagesByKeywords(keywords, channel, channelName);
+        
+        res.json({
+            success: true,
+            data: result
+        });
+        
+    } catch (error) {
+        console.error("❌ Error searching messages by keywords:", error);
+        res.status(500).json({ 
+            success: false,
+            error: "Failed to search messages by keywords", 
+            details: error.message 
+        });
+    }
+});
+
+/**
+ * GET /api/slack-gemini/advanced-keyword-search
+ * Advanced keyword search with filters (time range, message count, etc.)
+ */
+router.get("/advanced-keyword-search", async (req, res) => {
+    const { 
+        keywords, 
+        channel, 
+        channelName = "Slack", 
+        hoursBack = 168, 
+        maxMessages = 50 
+    } = req.query;
+    
+    if (!keywords) {
+        return res.status(400).json({ 
+            error: "Missing keywords parameter", 
+            example: "/api/slack-gemini/advanced-keyword-search?keywords=pandas&channel=C123456&hoursBack=24&maxMessages=20" 
+        });
+    }
+
+    if (!channel) {
+        return res.status(400).json({ 
+            error: "Missing channel id", 
+            example: "/api/slack-gemini/advanced-keyword-search?keywords=pandas&channel=C123456&hoursBack=24&maxMessages=20" 
+        });
+    }
+
+    try {
+        const hours = parseInt(hoursBack) || 168;
+        const maxMsgs = parseInt(maxMessages) || 50;
+        
+        console.log(`🔍 Advanced search: "${keywords}" in ${channel} (${channelName}) - last ${hours}h, max ${maxMsgs} messages`);
+        
+        const result = await integrationService.advancedKeywordSearch({
+            keywords,
+            channel,
+            channelName,
+            hoursBack: hours,
+            maxMessages: maxMsgs
+        });
+        
+        res.json({
+            success: true,
+            data: result
+        });
+        
+    } catch (error) {
+        console.error("❌ Error in advanced keyword search:", error);
+        res.status(500).json({ 
+            success: false,
+            error: "Failed to perform advanced keyword search", 
+            details: error.message 
+        });
+    }
+});
+
+/**
  * GET /api/slack-gemini/health
  * Health check endpoint for the integration service
  */
@@ -175,7 +272,9 @@ router.get("/health", (req, res) => {
             "GET /channel-summary": "Get comprehensive channel summary",
             "GET /message-summary": "Get AI summary for specific message",
             "POST /message-summary": "Post message for AI analysis",
-            "GET /channel-overview": "Get recent channel activity overview"
+            "GET /channel-overview": "Get recent channel activity overview",
+            "GET /keyword-search": "Search messages by keywords with AI summary",
+            "GET /advanced-keyword-search": "Advanced keyword search with filters"
         }
     });
 });
