@@ -1,13 +1,1 @@
-{
-  "type": "service_account",
-  "project_id": "voice-agent-mvp-466707",
-  "private_key_id": "9771a341b49c5e5324f77e3762d22d57bd05789f",
-  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCueaKwfqLb9E4R\n3WVBQ8v6shegbvzKsU+gkB5+3YBuKFkYWyFzkQVV/R1NrZezgh+esbsyPwLnir4y\nvzcc0JZgYLlOWJ8JFSN6fdC2Fv500YkNjSrdGAYeyPVa5k3O5FclMvOR4/SbRX+9\nVKDRoD3msx+pwMydI5OwfllkNjoUAMN5vtyuK5KT3UGOHHgAQjhtmrz1esmUfvXr\nPqrivSZGZ+RGebRToKcIq161jhcRobHCEkK2sbwu/BdvHqItLS22km2u930q2Ped\n5TycaQgOANZG7EQDmQnTCHCs65DUxSdPqUf8KGPLRuYtijm9F4UOclclSaN/swxX\n078dYNDzAgMBAAECggEAJD8SxFXaoZVUbrOu6GscQj2jWOoVzEofv7yRCUwc9UWe\nlMfB4E9da2rFHrEUle9PgFluCVc71DxnnQVKfsr6opUViigxCeMBVt4ycNHAFSa+\nsTkFkZ7/DoAzMKotufCIBitanJFd7K/4hK3DJymCEp5d0pdCKtcMRJtLGN2HHUZf\nbjT1W/81isjQOnfe7sf+HURpfyjfHWOVvfchzHKeJzVHDE2wnT6ZfY5wirRgXSYc\nSp5cQXnub16tuX2HAj1c72iLImxQ89SSVUovqNl1ISaLEutgEOzmWgBOddKk0lHK\nVHxpVpgJfeV7xQFvmm6xstTXKwb1XsV8XYIQyMHYwQKBgQDdQNVJtyC6UEBLv33y\nrFi9BAMlvaChg7Pp6qtR9AHwBVIs5WkfCmDcTDlSt9Pgk3xSD5EOYDDELOgUuXk1\nSp310msGCEKYNX0lRgmJqyuM8/Ffk8u4IYFdQAozS7Oo2wZEkuPDAXdUI6pP1FjA\noDyAkUCH0x9nB3jTTJSPIGKBEwKBgQDJ4Cfp2oIBuXGLVyT41wGqGEw7ycriK7Sh\nqYCRXhx3rCPLd+pDvVo2/+lGA4n7f59bqOcsob/AwoXI1NXVSFArVdOcBIFZTq5O\ncbiYWsJcT2j6wwaeHcEeoj+lYCUI6zMX8a/+WebkVZgn94JGqtRvIOtMpOBHARh8\n8OCQ+fRMoQKBgAd233s8LWN7v5+Ol04vmFLQJtcIHbo1OkWjACKkq8gQNeSD3NcK\nP5hPDgQHZaOG9kPCeK9WeW604SOJ2lf863VWovuyHaUK8Ozn/vxhBPgdZsBFuTK+\nFqIxveZbIHWK5hw8JGj4zLDO/zjwPgpJnaDsxZOPgNi1/NKMG9r0Sb53AoGBALwR\nzz1m6t0uZWB5xCDrNUrAriy5FwDT1MkS/4ruETlQLly9D4siGazJhwpJ+79Iqy6a\nURvcaKbs0fRCjB/R6ZYltClSbSrFSVAdU+rkCtQyystq63xcnfCrGP45buc7LvNs\nnxgnqxonv8PkKwMo3RXWpj9WDvc3RxgG1D9cDcNhAoGAbqzFc0BnI5VCWdsmKb3d\nyraKHS9W0EuG/YbfcoCCzJydIoIAYk/kOInID4fA2gMmlPKhI4+sJ5oS70/O2BTK\nFneg7AMrWW9fZA91QGm+jIhDafAg/HGaY5KlGrp8XgmZpUCWcyxYqTGQcM9aofwh\nHIv5nnPSIdjBKE40QJCOyHA=\n-----END PRIVATE KEY-----\n",
-  "client_email": "voice-agent-mvp-sa@voice-agent-mvp-466707.iam.gserviceaccount.com",
-  "client_id": "111395189877267847219",
-  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-  "token_uri": "https://oauth2.googleapis.com/token",
-  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/voice-agent-mvp-sa%40voice-agent-mvp-466707.iam.gserviceaccount.com",
-  "universe_domain": "googleapis.com"
-}
+
