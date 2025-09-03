@@ -5,18 +5,10 @@ const todoService = require("../services/todoService");
 exports.resumeTask = async (req, res) => {
     try {
         const { taskId } = req.params;
-        const task = await todoService.getTodoById(taskId);
-
+        const task = await todoService.getTodoByIdForUser(taskId, req.user._id);
         if (!task) return res.status(404).json({ message: "Task not found" });
-
-        // Sort by lastOpened (newest first)
         const recentFiles = task.files.sort((a, b) => new Date(b.lastOpened) - new Date(a.lastOpened));
-
-        res.json({
-            taskId: task._id,
-            title: task.title,
-            files: recentFiles
-        });
+        res.json({ taskId: task._id, title: task.title, files: recentFiles });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -28,7 +20,7 @@ exports.resumeTask = async (req, res) => {
 
 exports.getTodos = async (req, res) => {
     try {
-        const todos = await todoService.getTodos();
+        const todos = await todoService.getTodos(req.user._id);
         res.json(todos);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -38,7 +30,7 @@ exports.getTodos = async (req, res) => {
 // Get single todo
 exports.getTodoById = async (req, res) => {
     try {
-        const todo = await todoService.getTodoById(req.params.id);
+        const todo = await todoService.getTodoByIdForUser(req.params.id, req.user._id);
         if (!todo) return res.status(404).json({ message: "Todo not found" });
         res.json(todo);
     } catch (err) {
@@ -49,7 +41,8 @@ exports.getTodoById = async (req, res) => {
 // Create todo
 exports.createTodo = async (req, res) => {
     try {
-        const todo = await todoService.createTodo(req.body);
+        const todo = await todoService.createTodoForUser(req.user._id, req.body);
+        console.log(`todo stored: ${todo._id} - ${todo.title}`);
         res.status(201).json(todo);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -59,7 +52,7 @@ exports.createTodo = async (req, res) => {
 // Update todo
 exports.updateTodo = async (req, res) => {
     try {
-        const todo = await todoService.updateTodo(req.params.id, req.body);
+        const todo = await todoService.updateTodoForUser(req.params.id, req.user._id, req.body);
         if (!todo) return res.status(404).json({ message: "Todo not found" });
         res.json(todo);
     } catch (err) {
@@ -70,7 +63,7 @@ exports.updateTodo = async (req, res) => {
 // Delete todo
 exports.deleteTodo = async (req, res) => {
     try {
-        const todo = await todoService.deleteTodo(req.params.id);
+        const todo = await todoService.deleteTodoForUser(req.params.id, req.user._id);
         if (!todo) return res.status(404).json({ message: "Todo not found" });
         res.json({ message: "Todo deleted successfully" });
     } catch (err) {
