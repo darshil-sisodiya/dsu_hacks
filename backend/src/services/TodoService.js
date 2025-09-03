@@ -28,4 +28,22 @@ async function deleteTodoForUser(id, userId) {
     return await Todo.findOneAndDelete({ _id: id, userId });
 }
 
-module.exports = { getTodos, getTodoByIdForUser, createTodoForUser, updateTodoForUser, deleteTodoForUser };
+// Add or update a file entry on a todo for a user
+async function addOrUpdateFileForUser(id, userId, filePath) {
+    const now = new Date();
+    // Try update existing file's lastOpened
+    const updated = await Todo.findOneAndUpdate(
+        { _id: id, userId, "files.path": filePath },
+        { $set: { "files.$.lastOpened": now } },
+        { new: true }
+    );
+    if (updated) return updated;
+    // Otherwise push new
+    return await Todo.findOneAndUpdate(
+        { _id: id, userId },
+        { $push: { files: { path: filePath, lastOpened: now } } },
+        { new: true }
+    );
+}
+
+module.exports = { getTodos, getTodoByIdForUser, createTodoForUser, updateTodoForUser, deleteTodoForUser, addOrUpdateFileForUser };

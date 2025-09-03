@@ -3,7 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
-import { listTodos, createTodo, updateTodo, deleteTodo, type Todo } from "../lib/todos";
+import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume } from "../lib/todos";
+
+declare global {
+  interface Window {
+    taskAPI?: {
+      start: (taskId: string, token: string) => Promise<any>;
+      end: (taskId: string) => Promise<any>;
+      resumeOpen: (taskId: string, files: Array<{ path: string } | string>) => Promise<any>;
+      onFileTracked: (callback: (event: any, data: { taskId: string; path: string }) => void) => void;
+    };
+  }
+}
 
 export default function TodoDashboard() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -14,6 +25,8 @@ export default function TodoDashboard() {
   const [newDescription, setNewDescription] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [recentFiles, setRecentFiles] = useState<Array<{ path: string; lastOpened?: string }>>([]);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
 
@@ -23,6 +36,7 @@ export default function TodoDashboard() {
     try {
       const data = await listTodos();
       setTodos(data);
+      if (selectedId) await loadRecent(selectedId);
     } catch (e: any) {
       setError(e?.message || "Failed to load todos");
     } finally {
@@ -30,7 +44,17 @@ export default function TodoDashboard() {
     }
   }
 
+  async function loadRecent(taskId: string) {
+    try {
+      const r = await getResume(taskId);
+      setRecentFiles(r.files || []);
+    } catch (e) {
+      setRecentFiles([]);
+    }
+  }
+
   useEffect(() => { refresh(); }, []);
+  useEffect(() => { if (selectedId) loadRecent(selectedId); }, [selectedId]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +85,42 @@ export default function TodoDashboard() {
       if (selectedId === todo._id) setSelectedId(null);
     } catch (e: any) {
       setError(e?.message || "Failed to delete");
+    }
+  }
+
+  async function onStartTask(taskId: string) {
+    setActiveTaskId(taskId);
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      return;
+    }
+    if (window.taskAPI) {
+      await window.taskAPI.start(taskId, token);
+      // Set up automatic file tracking listener
+      window.taskAPI.onFileTracked((event, data) => {
+        if (data.taskId === taskId) {
+          // Refresh the recent files list when a new file is tracked
+          loadRecent(taskId);
+        }
+      });
+    }
+  }
+
+  async function onEndTask(taskId: string) {
+    if (window.taskAPI) await window.taskAPI.end(taskId);
+    setActiveTaskId(null);
+  }
+
+
+
+  async function onResume(taskId: string) {
+    try {
+      const r = await getResume(taskId);
+      setRecentFiles(r.files || []);
+      if (window.taskAPI) await window.taskAPI.resumeOpen(taskId, r.files || []);
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -113,6 +173,21 @@ export default function TodoDashboard() {
                 >
                   <span className="truncate mr-3">{todo.title}</span>
                   <div className="flex items-center gap-2">
+                    {activeTaskId === todo._id ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEndTask(todo._id); }}
+                        className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100"
+                      >
+                        End Task
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onStartTask(todo._id); }}
+                        className="px-3 py-2 rounded-md bg-zinc-900 text-white hover:bg-zinc-800"
+                      >
+                        Start Task
+                      </button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleComplete(todo); }}
                       title="Toggle complete"
@@ -159,9 +234,23 @@ export default function TodoDashboard() {
                     <div className="font-medium">{selected.description}</div>
                   </div>
                 )}
+
+                <div className="flex items-center gap-2">
+                  <button onClick={() => onResume(selected._id)} className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100">Resume (open recent)</button>
+                </div>
+
+                {/* Recent Files */}
                 <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-200">
-                  <div className="text-xs text-zinc-500">Status</div>
-                  <div className="font-medium capitalize">{selected.status || 'pending'}</div>
+                  <div className="text-xs text-zinc-500 mb-2">Recent Files</div>
+                  {recentFiles.length === 0 ? (
+                    <div className="text-zinc-400 text-sm">No files tracked yet.</div>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {recentFiles.map((f, idx) => (
+                        <li key={idx} className="truncate">{f.path}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </motion.div>
             ) : (
