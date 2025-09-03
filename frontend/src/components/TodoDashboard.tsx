@@ -98,6 +98,14 @@ export default function TodoDashboard() {
     }
   }
 
+  // Inside your TodoDashboard component
+
+const handleLogout = () => {
+  localStorage.removeItem("auth_token"); // remove auth token
+  window.location.href = "/";       // redirect to login page
+};
+
+
   async function onStartTask(taskId: string) {
     setActiveTaskId(taskId);
     const token = localStorage.getItem('auth_token');
@@ -148,29 +156,44 @@ export default function TodoDashboard() {
       )}
 
       <motion.header
-        initial={{ y: -30, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="flex items-center justify-between px-6 py-4 bg-white shadow-md rounded-b-xl z-20 relative"
-      >
-        <h1 className="text-2xl font-bold tracking-tight">Your Task Board</h1>
-        <form onSubmit={onCreate} className="flex gap-2">
-          <input
-            value={newTitle}
-            onChange={e => setNewTitle(e.target.value)}
-            placeholder="Task title"
-            className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm"
-          />
-          <input
-            value={newDescription}
-            onChange={e => setNewDescription(e.target.value)}
-            placeholder="Description"
-            className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm"
-          />
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-800 font-semibold shadow-sm">
-            <FaPlus /> Add
-          </motion.button>
-        </form>
-      </motion.header>
+  initial={{ y: -30, opacity: 0 }}
+  animate={{ y: 0, opacity: 1 }}
+  className="flex items-center justify-between px-6 py-4 bg-white shadow-md rounded-b-xl z-20 relative"
+>
+  <h1 className="text-2xl font-bold tracking-tight">Your Task Board</h1>
+
+  <div className="flex gap-2 items-center">
+    {/* Task creation form */}
+    <form onSubmit={onCreate} className="flex gap-2">
+      <input
+        value={newTitle}
+        onChange={e => setNewTitle(e.target.value)}
+        placeholder="Task title"
+        className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm"
+      />
+      <input
+        value={newDescription}
+        onChange={e => setNewDescription(e.target.value)}
+        placeholder="Description"
+        className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800 shadow-sm focus:outline-none focus:ring-1 focus:ring-gray-400 text-sm"
+      />
+      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-800 font-semibold shadow-sm">
+        <FaPlus /> Add
+      </motion.button>
+    </form>
+
+    {/* Logout button */}
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={handleLogout}
+      className="px-4 py-2 rounded-lg bg-red-500 text-white font-semibold hover:bg-red-600 shadow-sm"
+    >
+      Logout
+    </motion.button>
+  </div>
+</motion.header>
+
 
       {error && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6 py-2 text-sm text-red-600 z-20 relative">
