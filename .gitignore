@@ -1,0 +1,14 @@
+# Node
+backend/node_modules/
+backend/package-lock.json
+
+# Env/secrets
+backend/.env
+
+# Logs
+*.log
+backend/npm-debug.log*
+
+# OS/Editor
+.DS_Store
+Thumbs.db
