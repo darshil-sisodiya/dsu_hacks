@@ -31,6 +31,7 @@ export default function TodoDashboard() {
   const [newFileNotification, setNewFileNotification] = useState<string | null>(null);
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [restoreData, setRestoreData] = useState<any>(null);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [taskPosition, setTaskPosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
@@ -197,6 +198,8 @@ const handleLogout = () => {
   totalFiles: r.files?.length || 0
 });
 
+        // Initialize all files as selected by default
+        setSelectedFiles(r.files?.map((f: any) => f.path) || []);
         setShowRestoreDialog(true);
       } else {
         setError('No files found for this task session.');
@@ -221,11 +224,36 @@ const handleLogout = () => {
       await window.taskAPI.resumeOpen(restoreData.taskId, filesToOpen);
       
       console.log(`✅ Successfully opened ${selectedFilePaths.length} files`);
+      
+      // Close dialog after successful restore
+      setShowRestoreDialog(false);
+      setRestoreData(null);
+      setSelectedFiles([]);
     } catch (error) {
       console.error('Error restoring files:', error);
       setError('Failed to open some files.');
     }
   }
+
+  // File selection functions
+  const toggleFileSelection = (filePath: string) => {
+    setSelectedFiles(prev => 
+      prev.includes(filePath) 
+        ? prev.filter(path => path !== filePath)
+        : [...prev, filePath]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.length === restoreData?.files.length) {
+      setSelectedFiles([]);
+    } else {
+      setSelectedFiles(restoreData?.files.map((f: any) => f.path) || []);
+    }
+  };
+
+  const isAllSelected = selectedFiles.length === (restoreData?.files.length || 0);
+  const isPartiallySelected = selectedFiles.length > 0 && selectedFiles.length < (restoreData?.files.length || 0);
 
   async function onTestFileTracking(taskId: string) {
     const token = localStorage.getItem('auth_token');
@@ -437,34 +465,73 @@ const handleLogout = () => {
           {restoreData.totalFiles || 0} files available
         </p>
 
-        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto border-t border-gray-200 dark:border-gray-700 pt-2">
+        {/* Select All Toggle */}
+        <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isAllSelected}
+              ref={(input) => {
+                if (input) input.indeterminate = isPartiallySelected;
+              }}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+            />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Select All ({selectedFiles.length}/{restoreData.files.length})
+            </span>
+          </label>
+        </div>
+
+        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto pt-2">
           {restoreData.files.map((file: any, index: number) => (
-            <motion.div
+            <motion.label
               key={index}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.25, delay: index * 0.05 }}
-              className="text-gray-700 dark:text-gray-300 text-sm truncate px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+              className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              {file.path}
-            </motion.div>
+              <input
+                type="checkbox"
+                checked={selectedFiles.includes(file.path)}
+                onChange={() => toggleFileSelection(file.path)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300 break-all flex-1">
+                {file.path}
+              </span>
+            </motion.label>
           ))}
         </div>
 
-        <div className="flex justify-end gap-2 pt-4">
-          <button
-            onClick={() => setShowRestoreDialog(false)}
-            className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onRestoreFiles(restoreData.files.map((f: any) => f.path))}
-            className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition"
-          >
-            Restore All
-          </button>
+        <div className="flex justify-between items-center pt-4">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {selectedFiles.length} of {restoreData.files.length} files selected
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowRestoreDialog(false);
+                setSelectedFiles([]);
+              }}
+              className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onRestoreFiles(selectedFiles)}
+              disabled={selectedFiles.length === 0}
+              className={`px-4 py-2 rounded-xl transition ${
+                selectedFiles.length === 0
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
+            >
+              Open Selected ({selectedFiles.length})
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
