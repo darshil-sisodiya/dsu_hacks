@@ -9,6 +9,7 @@ export type Todo = {
 	dueDate?: string;
 	createdAt?: string;
 	updatedAt?: string;
+	files?: Array<{ path: string; lastOpened?: string }>;
 };
 
 function authHeaders() {
@@ -51,4 +52,20 @@ export async function deleteTodo(id: string): Promise<void> {
 		headers: { ...authHeaders() },
 	});
 	if (!res.ok) throw new Error('Failed to delete todo');
+}
+
+export async function trackFile(taskId: string, filePath: string): Promise<Todo> {
+	const res = await fetch(`${getApiBaseUrl()}/api/todos/${taskId}/files/track`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json', ...authHeaders() },
+		body: JSON.stringify({ path: filePath })
+	});
+	if (!res.ok) throw new Error('Failed to track file');
+	return res.json();
+}
+
+export async function getResume(taskId: string): Promise<{ taskId: string; title: string; files: Array<{ path: string; lastOpened: string }>}> {
+	const res = await fetch(`${getApiBaseUrl()}/api/todos/${taskId}/resume`, { headers: { ...authHeaders() } });
+	if (!res.ok) throw new Error('Failed to fetch resume files');
+	return res.json();
 }

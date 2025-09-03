@@ -3,7 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
-import { listTodos, createTodo, updateTodo, deleteTodo, type Todo } from "../lib/todos";
+import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, trackFile, getResume } from "../lib/todos";
+
+declare global {
+  interface Window {
+    taskAPI?: {
+      start: (taskId: string) => Promise<any>;
+      end: (taskId: string) => Promise<any>;
+      openFile: (taskId: string, filePath: string) => Promise<any>;
+      resumeOpen: (taskId: string, files: Array<{ path: string } | string>) => Promise<any>;
+      pickFiles: () => Promise<{ paths: string[] } | null>;
+    };
+  }
+}
 
 export default function TodoDashboard() {
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -14,6 +26,8 @@ export default function TodoDashboard() {
   const [newDescription, setNewDescription] = useState("");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [recentFiles, setRecentFiles] = useState<Array<{ path: string; lastOpened?: string }>>([]);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
 
@@ -23,6 +37,7 @@ export default function TodoDashboard() {
     try {
       const data = await listTodos();
       setTodos(data);
+      if (selectedId) await loadRecent(selectedId);
     } catch (e: any) {
       setError(e?.message || "Failed to load todos");
     } finally {
@@ -30,7 +45,17 @@ export default function TodoDashboard() {
     }
   }
 
+  async function loadRecent(taskId: string) {
+    try {
+      const r = await getResume(taskId);
+      setRecentFiles(r.files || []);
+    } catch (e) {
+      setRecentFiles([]);
+    }
+  }
+
   useEffect(() => { refresh(); }, []);
+  useEffect(() => { if (selectedId) loadRecent(selectedId); }, [selectedId]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +86,61 @@ export default function TodoDashboard() {
       if (selectedId === todo._id) setSelectedId(null);
     } catch (e: any) {
       setError(e?.message || "Failed to delete");
+    }
+  }
+
+  async function onStartTask(taskId: string) {
+    setActiveTaskId(taskId);
+    if (window.taskAPI) await window.taskAPI.start(taskId);
+  }
+
+  async function onEndTask(taskId: string) {
+    if (window.taskAPI) await window.taskAPI.end(taskId);
+    setActiveTaskId(null);
+  }
+
+  async function onPickAndOpenFile(taskId: string) {
+    // Prefer Electron's native picker for absolute paths
+    if (window.taskAPI?.pickFiles) {
+      const res = await window.taskAPI.pickFiles();
+      const paths: string[] = (res && res.paths) || [];
+      for (const p of paths) {
+        if (p) {
+          if (window.taskAPI) await window.taskAPI.openFile(taskId, p);
+          try { await trackFile(taskId, p); } catch {}
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+      await loadRecent(taskId);
+      return;
+    }
+
+    // Fallback to browser input (may lack absolute path)
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      for (const f of files) {
+        const filepath = (f as any).path || f.name;
+        if (window.taskAPI && filepath) {
+          await window.taskAPI.openFile(taskId, filepath);
+          try { await trackFile(taskId, filepath); } catch {}
+          await new Promise(r => setTimeout(r, 200));
+        }
+      }
+      await loadRecent(taskId);
+    };
+    input.click();
+  }
+
+  async function onResume(taskId: string) {
+    try {
+      const r = await getResume(taskId);
+      setRecentFiles(r.files || []);
+      if (window.taskAPI) await window.taskAPI.resumeOpen(taskId, r.files || []);
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -113,6 +193,21 @@ export default function TodoDashboard() {
                 >
                   <span className="truncate mr-3">{todo.title}</span>
                   <div className="flex items-center gap-2">
+                    {activeTaskId === todo._id ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onEndTask(todo._id); }}
+                        className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100"
+                      >
+                        End Task
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onStartTask(todo._id); }}
+                        className="px-3 py-2 rounded-md bg-zinc-900 text-white hover:bg-zinc-800"
+                      >
+                        Start Task
+                      </button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleComplete(todo); }}
                       title="Toggle complete"
@@ -159,9 +254,27 @@ export default function TodoDashboard() {
                     <div className="font-medium">{selected.description}</div>
                   </div>
                 )}
+
+                <div className="flex items-center gap-2">
+                  {activeTaskId === selected._id ? (
+                    <button onClick={() => onPickAndOpenFile(selected._id)} className="px-3 py-2 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">Open & Track File</button>
+                  ) : (
+                    <button onClick={() => onResume(selected._id)} className="px-3 py-2 rounded-md border border-zinc-300 hover:bg-zinc-100">Resume (open recent)</button>
+                  )}
+                </div>
+
+                {/* Recent Files */}
                 <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-200">
-                  <div className="text-xs text-zinc-500">Status</div>
-                  <div className="font-medium capitalize">{selected.status || 'pending'}</div>
+                  <div className="text-xs text-zinc-500 mb-2">Recent Files</div>
+                  {recentFiles.length === 0 ? (
+                    <div className="text-zinc-400 text-sm">No files tracked yet.</div>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {recentFiles.map((f, idx) => (
+                        <li key={idx} className="truncate">{f.path}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </motion.div>
             ) : (
