@@ -1,143 +1,187 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaTasks, FaFileAlt, FaRegStickyNote } from "react-icons/fa";
-
-// Types
-type Task = {
-  id: number;
-  title: string;
-};
-
-type FileMap = {
-  [key: number]: string[];
-};
-
-type SummaryMap = {
-  [key: number]: string;
-};
+import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
+import { listTodos, createTodo, updateTodo, deleteTodo, type Todo } from "../lib/todos";
 
 export default function TodoDashboard() {
-  const [selectedTask, setSelectedTask] = useState<number | null>(null);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock Data
-  const tasks: Task[] = [
-    { id: 1, title: "Prepare Hackathon MVP" },
-    { id: 2, title: "Fix Electron Integration" },
-    { id: 3, title: "Design Corporate UI" },
-  ];
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
 
-  const files: FileMap = {
-    1: ["mvp_plan.pdf", "wireframes.png", "notes.txt"],
-    2: ["electron.js", "preload.js", "readme.md"],
-    3: ["style-guide.pdf", "colors.sketch", "fonts.zip"],
-  };
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const summaries: SummaryMap = {
-    1: "Build and showcase the MVP with authentication and file management.",
-    2: "Resolve integration issues between Next.js and Electron.",
-    3: "Implement modern corporate design system with warm tones.",
-  };
+  const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
+
+  async function refresh() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listTodos();
+      setTodos(data);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load todos");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { refresh(); }, []);
+
+  async function onCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    try {
+      const created = await createTodo({ title: newTitle, description: newDescription });
+      setTodos(prev => [created, ...prev]);
+      setNewTitle("");
+      setNewDescription("");
+    } catch (e: any) {
+      setError(e?.message || "Failed to create");
+    }
+  }
+
+  async function onToggleComplete(todo: Todo) {
+    try {
+      const updated = await updateTodo(todo._id, { status: todo.status === 'completed' ? 'pending' : 'completed' });
+      setTodos(prev => prev.map(t => t._id === todo._id ? updated : t));
+    } catch (e: any) {
+      setError(e?.message || "Failed to update");
+    }
+  }
+
+  async function onDelete(todo: Todo) {
+    try {
+      await deleteTodo(todo._id);
+      setTodos(prev => prev.filter(t => t._id !== todo._id));
+      if (selectedId === todo._id) setSelectedId(null);
+    } catch (e: any) {
+      setError(e?.message || "Failed to delete");
+    }
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-white text-gray-800">
+    <div className="flex flex-col min-h-screen bg-zinc-50 text-zinc-900">
       {/* Header */}
-      <header className="flex items-center px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-amber-50 to-orange-50">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-800">
-          ContextFlow
-        </h1>
+      <header className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 bg-white">
+        <h1 className="text-xl font-semibold tracking-tight">Tasks</h1>
+        <form onSubmit={onCreate} className="flex gap-2">
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="New task title"
+            className="px-3 py-2 rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+          />
+          <input
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="Description (optional)"
+            className="px-3 py-2 rounded-md border border-zinc-300 bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10"
+          />
+          <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-zinc-900 text-white hover:bg-zinc-800">
+            <FaPlus /> Add
+          </button>
+        </form>
       </header>
+
+      {error && (
+        <div className="px-6 py-2 text-sm text-red-600">{error}</div>
+      )}
 
       {/* Content Grid */}
       <main className="flex flex-1">
         {/* Left - Tasks */}
-        <div className="w-1/3 border-r border-gray-200 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-700 mb-4">
-            <FaTasks className="text-amber-600" /> Tasks
+        <div className="w-1/3 border-r border-zinc-200 p-6 bg-white">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-600 mb-3">
+            <FaTasks /> Tasks
           </h2>
-          <ul className="space-y-3">
-            {tasks.map((task: Task) => (
-              <li
-                key={task.id}
-                onClick={() => setSelectedTask(task.id)}
-                className={`cursor-pointer px-4 py-2 rounded-lg transition ${
-                  selectedTask === task.id
-                    ? "bg-amber-100 text-amber-700 font-medium"
-                    : "hover:bg-gray-100"
-                }`}
-              >
-                {task.title}
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-zinc-400">Loading...</p>
+          ) : (
+            <ul className="space-y-2">
+              {todos.map((todo) => (
+                <li
+                  key={todo._id}
+                  onClick={() => setSelectedId(todo._id)}
+                  className={`cursor-pointer px-4 py-3 rounded-lg border transition flex items-center justify-between ${
+                    selectedId === todo._id ? "bg-zinc-100 border-zinc-300" : "hover:bg-zinc-50 border-zinc-200"
+                  }`}
+                >
+                  <span className="truncate mr-3">{todo.title}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleComplete(todo); }}
+                      title="Toggle complete"
+                      className={`p-2 rounded-md border ${todo.status === 'completed' ? 'bg-green-100 border-green-300 text-green-700' : 'hover:bg-zinc-100 border-zinc-300'}`}
+                    >
+                      <FaCheck />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(todo); }}
+                      title="Delete"
+                      className="p-2 rounded-md border hover:bg-red-50 text-red-600 border-red-200"
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
-        {/* Middle - Files */}
-        <div className="w-1/3 border-r border-gray-200 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-700 mb-4">
-            <FaFileAlt className="text-amber-600" /> Files
+        {/* Middle - Details */}
+        <div className="w-1/3 border-r border-zinc-200 p-6 bg-white">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-600 mb-3">
+            <FaFileAlt /> Details
           </h2>
           <AnimatePresence mode="wait">
-            {selectedTask ? (
-              <motion.ul
-                key={selectedTask}
+            {selected ? (
+              <motion.div
+                key={selected._id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
+                transition={{ duration: 0.2 }}
                 className="space-y-3"
               >
-                {files[selectedTask]?.map((file: string, idx: number) => (
-                  <li
-                    key={idx}
-                    className="px-4 py-2 bg-gray-50 border rounded-lg hover:bg-amber-50 transition"
-                  >
-                    {file}
-                  </li>
-                ))}
-              </motion.ul>
+                <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-200">
+                  <div className="text-xs text-zinc-500">Title</div>
+                  <div className="font-medium">{selected.title}</div>
+                </div>
+                {selected.description && (
+                  <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-200">
+                    <div className="text-xs text-zinc-500">Description</div>
+                    <div className="font-medium">{selected.description}</div>
+                  </div>
+                )}
+                <div className="bg-zinc-50 p-4 rounded-lg border border-zinc-200">
+                  <div className="text-xs text-zinc-500">Status</div>
+                  <div className="font-medium capitalize">{selected.status || 'pending'}</div>
+                </div>
+              </motion.div>
             ) : (
-              <motion.p
-                key="nofiles"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-gray-400"
-              >
-                Select a task to view files
-              </motion.p>
+              <motion.p key="nodetail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-zinc-400">Select a task</motion.p>
             )}
           </AnimatePresence>
         </div>
 
         {/* Right - Summary */}
-        <div className="w-1/3 p-6">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-700 mb-4">
-            <FaRegStickyNote className="text-amber-600" /> Summary
+        <div className="w-1/3 p-6 bg-white">
+          <h2 className="flex items-center gap-2 text-sm font-medium text-zinc-600 mb-3">
+            <FaRegStickyNote /> Summary
           </h2>
           <AnimatePresence mode="wait">
-            {selectedTask ? (
-              <motion.div
-                key={selectedTask}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-gray-50 p-4 rounded-lg border text-gray-700"
-              >
-                {summaries[selectedTask]}
+            {selected ? (
+              <motion.div key={selected._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="bg-zinc-50 p-4 rounded-lg border border-zinc-200 text-zinc-700">
+                Created {selected.createdAt ? new Date(selected.createdAt).toLocaleString() : ""}
               </motion.div>
             ) : (
-              <motion.p
-                key="nosummary"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-gray-400"
-              >
-                Select a task to view summary
-              </motion.p>
+              <motion.p key="nosummary" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-zinc-400">Select a task to view summary</motion.p>
             )}
           </AnimatePresence>
         </div>
