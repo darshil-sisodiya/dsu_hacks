@@ -145,16 +145,212 @@ function resolveShortcut(lnkPath) {
 	});
 }
 
-function startSimpleFileTracking(win, taskId, token) {
-	console.log(`🚀 Starting SIMPLE file tracking for task: ${taskId}`);
+async function detectOpenFilesAdvanced(taskId, token, trackedFiles, currentlyOpenFiles, win) {
+	console.log(`🔍 VS Code file detection scan...`);
+	
+	// Only check VS Code window titles for file paths
+	await detectVSCodeFiles(taskId, token, trackedFiles, currentlyOpenFiles, win);
+}
+
+async function detectVSCodeFiles(taskId, token, trackedFiles, currentlyOpenFiles, win) {
+	const ps = spawn('powershell.exe', ['-Command', `
+		# Only get VS Code windows
+		$processes = Get-Process -Name "Code" -ErrorAction SilentlyContinue
+		foreach ($proc in $processes) {
+			try {
+				if ($proc.MainWindowTitle -and $proc.MainWindowTitle -ne "") {
+					Write-Host "Code|$($proc.MainWindowTitle)"
+				}
+			} catch {}
+		}
+	`]);
+	
+	return new Promise((resolve) => {
+		ps.stdout.on('data', (data) => {
+			const lines = data.toString().split('\n');
+			lines.forEach(line => {
+				const trimmed = line.trim();
+				if (!trimmed || !trimmed.startsWith('Code|')) return;
+				
+				const title = trimmed.replace('Code|', '');
+				
+				// Extract file paths from VS Code window titles only
+				const filePaths = extractVSCodeFilePaths(title);
+				filePaths.forEach(async (filePath) => {
+					if (!trackedFiles.has(filePath)) {
+						trackedFiles.add(filePath);
+						currentlyOpenFiles.set(filePath, { lastSeen: new Date(), source: 'vscode' });
+						console.log(`📝 VS Code detected NEW file: ${filePath}`);
+						win.webContents.send('task:fileTracked', { taskId, path: filePath });
+						await postTrack(taskId, token, filePath);
+					} else {
+						currentlyOpenFiles.set(filePath, { lastSeen: new Date(), source: 'vscode' });
+					}
+				});
+			});
+		});
+		
+		ps.on('close', () => resolve());
+		setTimeout(() => { ps.kill(); resolve(); }, 3000);
+	});
+}
+
+function extractVSCodeFilePaths(title) {
+	const filePaths = [];
+	
+	// VS Code title patterns:
+	// "● filename.js - project - Visual Studio Code"
+	// "filename.js - project - Visual Studio Code"  
+	// "project - Visual Studio Code" (no specific file)
+	
+	// Only extract if there's a specific file mentioned
+	const patterns = [
+		// Pattern 1: "● filename.js - project - Visual Studio Code"
+		/^●?\s*(.+?)\s*-\s*.+?\s*-\s*Visual Studio Code$/,
+		// Pattern 2: "filename.js - Visual Studio Code" (direct file)
+		/^●?\s*(.+?)\s*-\s*Visual Studio Code$/
+	];
+	
+	for (const pattern of patterns) {
+		const match = title.match(pattern);
+		if (match && match[1]) {
+			let fileName = match[1].trim();
+			
+			// Remove VS Code unsaved indicator
+			fileName = fileName.replace(/^●\s*/, '');
+			
+			// Only process if it looks like a filename (has extension)
+			if (fileName.includes('.') && !fileName.includes(' - ')) {
+				// If it's a full path, use it directly
+				if (fileName.includes('\\') || fileName.includes('/')) {
+					filePaths.push(fileName);
+				}
+				// If it's just a filename, we'll skip it for now
+				// (Could enhance later to search in workspace folders)
+				else {
+					console.log(`📝 VS Code file without full path: ${fileName}`);
+				}
+			}
+			break; // Only use the first matching pattern
+		}
+	}
+	
+	// Also check for any full file paths directly in the title (including .exe files)
+	const pathMatches = title.match(/[A-Z]:\\[^|<>:*?"]*\.[a-zA-Z0-9]{1,5}/g);
+	if (pathMatches) {
+		filePaths.push(...pathMatches);
+	}
+	
+	return filePaths;
+}
+
+async function detectNewProcesses(taskId, token, trackedFiles, currentlyOpenFiles, win, processBaseline) {
+	console.log(`🔍 Checking for new processes/executables...`);
+	
+	const ps = spawn('powershell.exe', ['-Command', `
+		Get-Process | Where-Object { $_.Path -and $_.Path -ne "" } | Select-Object ProcessName, Path | ForEach-Object {
+			Write-Host "$($_.ProcessName)|$($_.Path)"
+		}
+	`]);
+	
+	return new Promise((resolve) => {
+		ps.stdout.on('data', (data) => {
+			const lines = data.toString().split('\n');
+			lines.forEach(async line => {
+				const trimmed = line.trim();
+				if (!trimmed || !trimmed.includes('|')) return;
+				
+				const parts = trimmed.split('|');
+				if (parts.length >= 2) {
+					const processName = parts[0];
+					const executablePath = parts[1];
+					
+					// Only track if it's a NEW executable (not in baseline) and not already tracked
+					if (executablePath && 
+						executablePath.toLowerCase().endsWith('.exe') && 
+						!processBaseline.has(executablePath) && 
+						!trackedFiles.has(executablePath)) {
+						
+						// Skip system processes and common Windows processes
+						const skipProcesses = ['svchost', 'dwm', 'winlogon', 'csrss', 'lsass', 'services', 'system', 'registry', 'taskhostw', 'explorer', 'RuntimeBroker'];
+						if (!skipProcesses.some(skip => processName.toLowerCase().includes(skip))) {
+							trackedFiles.add(executablePath);
+							currentlyOpenFiles.set(executablePath, { lastSeen: new Date(), source: 'process' });
+							console.log(`🚀 NEW executable launched AFTER task start: ${executablePath} (${processName})`);
+							console.log(`   ✅ Not in baseline - this is a user-launched application!`);
+							win.webContents.send('task:fileTracked', { taskId, path: executablePath });
+							await postTrack(taskId, token, executablePath);
+						} else {
+							console.log(`⚠️ Skipped system process: ${processName} (${executablePath})`);
+						}
+					} else if (processBaseline.has(executablePath)) {
+						// This was already running when task started - don't track
+						// console.log(`⏸️ Ignoring pre-existing process: ${processName}`);
+					}
+				}
+			});
+		});
+		
+		ps.on('close', () => resolve());
+		setTimeout(() => { ps.kill(); resolve(); }, 5000);
+	});
+}
+
+async function captureProcessBaseline() {
+	console.log(`📸 Capturing baseline of currently running processes...`);
+	
+	const ps = spawn('powershell.exe', ['-Command', `
+		Get-Process | Where-Object { $_.Path -and $_.Path -ne "" } | Select-Object ProcessName, Path | ForEach-Object {
+			Write-Host "$($_.ProcessName)|$($_.Path)"
+		}
+	`]);
+	
+	const runningProcesses = new Set();
+	
+	return new Promise((resolve) => {
+		ps.stdout.on('data', (data) => {
+			const lines = data.toString().split('\n');
+			lines.forEach(line => {
+				const trimmed = line.trim();
+				if (!trimmed || !trimmed.includes('|')) return;
+				
+				const parts = trimmed.split('|');
+				if (parts.length >= 2) {
+					const executablePath = parts[1];
+					if (executablePath && executablePath.toLowerCase().endsWith('.exe')) {
+						runningProcesses.add(executablePath);
+					}
+				}
+			});
+		});
+		
+		ps.on('close', () => {
+			console.log(`📸 Baseline captured: ${runningProcesses.size} running executables`);
+			resolve(runningProcesses);
+		});
+		
+		setTimeout(() => { ps.kill(); resolve(runningProcesses); }, 5000);
+	});
+}
+
+function startAdvancedFileTracking(win, taskId, token) {
+	console.log(`🚀 Starting ADVANCED file tracking for task: ${taskId}`);
 	
 	const recentDir = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Recent');
 	const trackedFiles = new Set();
+	const currentlyOpenFiles = new Map(); // filePath -> { lastSeen: Date, source: 'recent'|'window'|'handle' }
 	let isActive = true;
 	
 	// CLEAR the global seen files map for this new task session
 	globalSeenFiles.clear();
 	console.log(`🧹 Cleared previous file tracking history for fresh start`);
+
+	// Capture baseline of currently running processes
+	let processBaseline = new Set();
+	captureProcessBaseline().then(baseline => {
+		processBaseline = baseline;
+		console.log(`✅ Process baseline established with ${baseline.size} executables`);
+	});
 	
 	// Get baseline of existing .lnk files with their modification times
 	try {
@@ -222,13 +418,20 @@ function startSimpleFileTracking(win, taskId, token) {
 				
 				// Resolve the shortcut to get the actual file path
 				const targetPath = await resolveShortcut(item.filePath);
+				console.log(`🔍 Resolved path: ${targetPath} (from ${item.file})`);
 				
 				if (targetPath && !trackedFiles.has(targetPath)) {
 					trackedFiles.add(targetPath);
-					console.log(`✅ ${item.type} file tracked: ${targetPath}`);
+					currentlyOpenFiles.set(targetPath, { lastSeen: new Date(), source: 'recent' });
+					
+					// Show file extension for debugging
+					const extension = targetPath.split('.').pop()?.toLowerCase() || 'no-extension';
+					console.log(`✅ ${item.type} file tracked: ${targetPath} (${extension} file)`);
+					
 					win.webContents.send('task:fileTracked', { taskId, path: targetPath });
 					await postTrack(taskId, token, targetPath);
 				} else if (targetPath) {
+					currentlyOpenFiles.set(targetPath, { lastSeen: new Date(), source: 'recent' });
 					console.log(`⚠️ File already tracked this session: ${targetPath}`);
 				} else {
 					console.log(`❌ Could not resolve shortcut: ${item.filePath}`);
@@ -239,11 +442,35 @@ function startSimpleFileTracking(win, taskId, token) {
 		}
 	}, 2000);
 	
+	// Advanced file detection - Check window titles and file handles
+	const advancedInterval = setInterval(async () => {
+		if (!isActive) return;
+		
+		try {
+			await detectOpenFilesAdvanced(taskId, token, trackedFiles, currentlyOpenFiles, win);
+		} catch (error) {
+			console.error('❌ Error during advanced file detection:', error);
+		}
+	}, 3000);
+
+	// Process monitoring for .exe files
+	const processInterval = setInterval(async () => {
+		if (!isActive) return;
+		
+		try {
+			await detectNewProcesses(taskId, token, trackedFiles, currentlyOpenFiles, win, processBaseline);
+		} catch (error) {
+			console.error('❌ Error during process monitoring:', error);
+		}
+	}, 4000);
+	
 	return {
 		stop: async () => {
 			isActive = false;
 			clearInterval(interval);
-			console.log(`🛑 Stopped file tracking for task: ${taskId}`);
+			clearInterval(advancedInterval);
+			clearInterval(processInterval);
+			console.log(`🛑 Stopped advanced file tracking for task: ${taskId}`);
 		}
 	};
 }
@@ -259,7 +486,7 @@ function registerIpcHandlers(win) {
 				await activeMonitors.get(taskId).stop();
 			}
 			
-			const monitor = startSimpleFileTracking(win, taskId, token);
+			const monitor = startAdvancedFileTracking(win, taskId, token);
 			activeMonitors.set(taskId, monitor);
 			
 			console.log(`✅ Successfully started tracking for task: ${taskId}`);
