@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { FaTasks, FaPlus, FaSearch, FaSignOutAlt, FaUser, FaCheck } from "react-icons/fa";
+import { FaTasks, FaPlus, FaSearch, FaSignOutAlt, FaUser, FaCheck, FaComments } from "react-icons/fa";
 import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume, getSummary } from "../lib/todos";
 import { poppins } from "../fonts";
 import TaskList from "./TaskList";
 import TaskDetails from "./TaskDetails";
 import CreateTaskModal from "./CreateTaskModal";
 import SessionRestoreDialog from "./SessionRestoreDialog";
+import SlackKeywordSearch from "./SlackKeywordSearch";
 
 declare global {
   interface Window {
@@ -41,6 +42,7 @@ export default function TodoDashboard() {
        const [selectedView, setSelectedView] = useState<'summary' | 'files'>('files');
   const [summaries, setSummaries] = useState<Array<{ file: string; summary: string }>>([]);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [showSlackSearch, setShowSlackSearch] = useState(false);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
 
@@ -383,6 +385,17 @@ export default function TodoDashboard() {
                 <FaPlus className="text-sm" />
                 New Task
               </motion.button>
+
+              {/* Slack Search Button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowSlackSearch(true)}
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold shadow-lg shadow-blue-600/30 hover:bg-blue-700 transition-all flex items-center gap-2"
+              >
+                <FaComments className="text-sm" />
+                Slack Search
+              </motion.button>
               
               {/* Logout Button */}
               <motion.button
@@ -495,6 +508,12 @@ export default function TodoDashboard() {
         files={restoreData?.files || []}
         lastSession={restoreData?.lastSession}
         onRestore={onRestoreFiles}
+      />
+
+      {/* Slack Keyword Search Modal */}
+      <SlackKeywordSearch
+        isOpen={showSlackSearch}
+        onClose={() => setShowSlackSearch(false)}
       />
     </motion.div>
   );
