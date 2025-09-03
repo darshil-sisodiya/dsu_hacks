@@ -84,7 +84,8 @@ async function loadFrontend(win) {
 	await win.loadURL(entry.value);
 }
 
-const activeMonitors = new Map(); // taskId -> { stop: fn, trackedFiles: Set }
+const activeMonitors = new Map(); // taskId -> { stop: fn }
+const globalSeenFiles = new Map(); // Global map that tracks filename -> last modified time
 
 async function postTrack(taskId, token, fullPath) {
 	try {
@@ -111,237 +112,138 @@ async function postTrack(taskId, token, fullPath) {
 	}
 }
 
-// Method 1: PowerShell Process Monitor
-function startPowerShellMonitor(win, taskId, token, trackedFiles) {
-	console.log(`🚀 Starting PowerShell file monitor for task: ${taskId}`);
-	
-	const psScript = `
-		$Events = @()
-		Register-WmiEvent -Query "SELECT * FROM Win32_VolumeChangeEvent WHERE EventType = 2" -Action {
-			$Event = $Event.SourceEventArgs.NewEvent
-			Write-Host "FILE_OPENED:$($Event.DriveName)"
-		}
-		
-		while ($true) {
-			$processes = Get-Process | Where-Object { $_.MainWindowTitle -ne "" }
-			foreach ($proc in $processes) {
-				try {
-					if ($proc.MainModule.FileName -match "\\.(txt|doc|docx|pdf|xlsx|ppt|pptx|js|ts|py|java|cpp|c|h|html|css|json|xml|md|log)$") {
-						Write-Host "FILE_OPENED:$($proc.MainModule.FileName)"
-					}
-				} catch {}
-			}
-			Start-Sleep -Seconds 2
-		}
-	`;
-
-	const ps = spawn('powershell.exe', ['-Command', psScript]);
-	let isActive = true;
-
-	ps.stdout.on('data', (data) => {
-		if (!isActive) return;
-		const output = data.toString();
-		const lines = output.split('\n');
-		
-		lines.forEach(line => {
-			if (line.startsWith('FILE_OPENED:')) {
-				const filePath = line.replace('FILE_OPENED:', '').trim();
-				if (filePath && !trackedFiles.has(filePath)) {
-					trackedFiles.add(filePath);
-					console.log(`📁 PowerShell detected file: ${filePath}`);
-					win.webContents.send('task:fileTracked', { taskId, path: filePath });
-					postTrack(taskId, token, filePath);
-				}
-			}
-		});
-	});
-
-	ps.stderr.on('data', (data) => {
-		console.error('PowerShell monitor error:', data.toString());
-	});
-
-	return {
-		stop: () => {
-			isActive = false;
-			ps.kill();
-			console.log(`🛑 Stopped PowerShell monitor for task: ${taskId}`);
-		}
-	};
-}
-
-// Method 2: Active Window Title Monitor
-function startActiveWindowMonitor(win, taskId, token, trackedFiles) {
-	console.log(`🚀 Starting active window monitor for task: ${taskId}`);
-	let isActive = true;
-	
-	const interval = setInterval(() => {
-		if (!isActive) return;
-		
-		// Use PowerShell to get active window title
+function resolveShortcut(lnkPath) {
+	return new Promise((resolve) => {
 		const ps = spawn('powershell.exe', ['-Command', `
-			Add-Type @"
-				using System;
-				using System.Runtime.InteropServices;
-				using System.Text;
-				public class Win32 {
-					[DllImport("user32.dll")]
-					public static extern IntPtr GetForegroundWindow();
-					[DllImport("user32.dll")]
-					public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-					[DllImport("user32.dll", SetLastError=true)]
-					public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-				}
-"@
-			$hwnd = [Win32]::GetForegroundWindow()
-			$title = New-Object System.Text.StringBuilder 256
-			[Win32]::GetWindowText($hwnd, $title, 256)
-			$processId = 0
-			[Win32]::GetWindowThreadProcessId($hwnd, [ref]$processId)
+			$shell = New-Object -ComObject WScript.Shell
 			try {
-				$process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-				if ($process -and $process.MainModule) {
-					Write-Host "$($process.MainModule.FileName)|$($title.ToString())"
-				}
-			} catch {}
+				$shortcut = $shell.CreateShortcut('${lnkPath.replace(/'/g, "''")}')
+				Write-Host $shortcut.TargetPath
+			} catch {
+				Write-Host "ERROR"
+			}
 		`]);
-
+		
+		let output = '';
 		ps.stdout.on('data', (data) => {
-			const output = data.toString().trim();
-			if (output && output.includes('|')) {
-				const [filePath, title] = output.split('|');
-				
-				// Check if it looks like a file path and has a file extension
-				if (filePath && filePath.includes('\\') && /\.[a-zA-Z0-9]{1,5}$/.test(filePath)) {
-					if (!trackedFiles.has(filePath)) {
-						trackedFiles.add(filePath);
-						console.log(`🖼️ Active window detected file: ${filePath} (${title})`);
-						win.webContents.send('task:fileTracked', { taskId, path: filePath });
-						postTrack(taskId, token, filePath);
-					}
-				}
-				
-				// Also check window title for file paths
-				if (title && title.includes('\\') && /\.[a-zA-Z0-9]{1,5}/.test(title)) {
-					const matches = title.match(/[A-Z]:\\[^|<>:*?"]*\.[a-zA-Z0-9]{1,5}/g);
-					if (matches) {
-						matches.forEach(match => {
-							if (!trackedFiles.has(match)) {
-								trackedFiles.add(match);
-								console.log(`📝 Window title detected file: ${match}`);
-								win.webContents.send('task:fileTracked', { taskId, path: match });
-								postTrack(taskId, token, match);
-							}
-						});
-					}
-				}
+			output += data.toString();
+		});
+		
+		ps.on('close', () => {
+			const targetPath = output.trim();
+			if (targetPath && targetPath !== 'ERROR') {
+				resolve(targetPath);
+			} else {
+				resolve(null);
 			}
 		});
-	}, 1000);
-
-	return {
-		stop: () => {
-			isActive = false;
-			clearInterval(interval);
-			console.log(`🛑 Stopped active window monitor for task: ${taskId}`);
-		}
-	};
+		
+		setTimeout(() => {
+			ps.kill();
+			resolve(null);
+		}, 2000);
+	});
 }
 
-// Method 3: Recent Files Monitor (Enhanced)
-function startEnhancedRecentMonitor(win, taskId, token, trackedFiles) {
-	console.log(`🚀 Starting enhanced recent files monitor for task: ${taskId}`);
+function startSimpleFileTracking(win, taskId, token) {
+	console.log(`🚀 Starting SIMPLE file tracking for task: ${taskId}`);
 	
-	const recentPaths = [
-		path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Recent'),
-		path.join(process.env.APPDATA || '', 'Microsoft', 'Office', 'Recent'),
-		path.join(process.env.USERPROFILE || '', 'Recent'),
-	];
-	
+	const recentDir = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Recent');
+	const trackedFiles = new Set();
 	let isActive = true;
-	const seenFiles = new Set();
 	
-	// Seed with existing files
-	recentPaths.forEach(recentDir => {
+	// CLEAR the global seen files map for this new task session
+	globalSeenFiles.clear();
+	console.log(`🧹 Cleared previous file tracking history for fresh start`);
+	
+	// Get baseline of existing .lnk files with their modification times
+	try {
+		if (fs.existsSync(recentDir)) {
+			fs.readdirSync(recentDir).forEach(file => {
+				if (file.toLowerCase().endsWith('.lnk')) {
+					const filePath = path.join(recentDir, file);
+					const stats = fs.statSync(filePath);
+					globalSeenFiles.set(file, stats.mtime.getTime());
+				}
+			});
+		}
+		console.log(`📋 Baseline: ${globalSeenFiles.size} existing .lnk files with timestamps (will track NEW and MODIFIED ones)`);
+	} catch (error) {
+		console.warn('Warning reading Recent directory:', error.message);
+	}
+	
+	// Poll for new .lnk files every 2 seconds
+	const interval = setInterval(async () => {
+		if (!isActive) return;
+		
 		try {
-			if (fs.existsSync(recentDir)) {
-				fs.readdirSync(recentDir).forEach(file => {
-					if (file.toLowerCase().endsWith('.lnk')) {
-						seenFiles.add(path.join(recentDir, file));
+			if (!fs.existsSync(recentDir)) {
+				console.log(`❌ Recent directory does not exist: ${recentDir}`);
+				return;
+			}
+			
+			const currentFiles = fs.readdirSync(recentDir);
+			const allLnkFiles = currentFiles.filter(file => file.toLowerCase().endsWith('.lnk'));
+			const newOrModifiedFiles = [];
+			
+			// Check each .lnk file for new or modified status
+			for (const file of allLnkFiles) {
+				const filePath = path.join(recentDir, file);
+				try {
+					const stats = fs.statSync(filePath);
+					const currentMtime = stats.mtime.getTime();
+					const previousMtime = globalSeenFiles.get(file);
+					
+					if (!previousMtime) {
+						// Completely new file
+						newOrModifiedFiles.push({ file, type: 'NEW', filePath });
+						globalSeenFiles.set(file, currentMtime);
+					} else if (currentMtime > previousMtime) {
+						// File was modified (opened again)
+						newOrModifiedFiles.push({ file, type: 'MODIFIED', filePath });
+						globalSeenFiles.set(file, currentMtime);
 					}
+				} catch (error) {
+					console.warn(`Error checking file ${file}:`, error.message);
+				}
+			}
+			
+			console.log(`🔍 Scanning: ${allLnkFiles.length} total .lnk files, ${newOrModifiedFiles.length} new/modified files`);
+			
+			if (newOrModifiedFiles.length > 0) {
+				console.log(`🆕 New/Modified files found:`);
+				newOrModifiedFiles.forEach(item => {
+					console.log(`  ${item.type}: ${item.file}`);
 				});
+			}
+			
+			for (const item of newOrModifiedFiles) {
+				console.log(`🔗 Processing ${item.type.toLowerCase()} .lnk file: ${item.file}`);
+				
+				// Resolve the shortcut to get the actual file path
+				const targetPath = await resolveShortcut(item.filePath);
+				
+				if (targetPath && !trackedFiles.has(targetPath)) {
+					trackedFiles.add(targetPath);
+					console.log(`✅ ${item.type} file tracked: ${targetPath}`);
+					win.webContents.send('task:fileTracked', { taskId, path: targetPath });
+					await postTrack(taskId, token, targetPath);
+				} else if (targetPath) {
+					console.log(`⚠️ File already tracked this session: ${targetPath}`);
+				} else {
+					console.log(`❌ Could not resolve shortcut: ${item.filePath}`);
+				}
 			}
 		} catch (error) {
-			console.warn(`Warning reading ${recentDir}:`, error.message);
+			console.error('❌ Error during file monitoring:', error);
 		}
-	});
-
-	const interval = setInterval(() => {
-		if (!isActive) return;
-		
-		recentPaths.forEach(recentDir => {
-			try {
-				if (!fs.existsSync(recentDir)) return;
-				
-				fs.readdirSync(recentDir).forEach(file => {
-					if (!file.toLowerCase().endsWith('.lnk')) return;
-					
-					const fullLnkPath = path.join(recentDir, file);
-					if (seenFiles.has(fullLnkPath)) return;
-					
-					seenFiles.add(fullLnkPath);
-					
-					// Use PowerShell to resolve shortcut
-					const ps = spawn('powershell.exe', ['-Command', `
-						$shell = New-Object -ComObject WScript.Shell
-						try {
-							$shortcut = $shell.CreateShortcut('${fullLnkPath.replace(/'/g, "''")}')
-							Write-Host $shortcut.TargetPath
-						} catch {
-							Write-Host "ERROR"
-						}
-					`]);
-					
-					ps.stdout.on('data', (data) => {
-						const targetPath = data.toString().trim();
-						if (targetPath && targetPath !== 'ERROR' && !trackedFiles.has(targetPath)) {
-							trackedFiles.add(targetPath);
-							console.log(`🔗 Recent files detected: ${targetPath}`);
-							win.webContents.send('task:fileTracked', { taskId, path: targetPath });
-							postTrack(taskId, token, targetPath);
-						}
-					});
-				});
-			} catch (error) {
-				console.warn(`Warning scanning ${recentDir}:`, error.message);
-			}
-		});
 	}, 2000);
-
-	return {
-		stop: () => {
-			isActive = false;
-			clearInterval(interval);
-			console.log(`🛑 Stopped enhanced recent monitor for task: ${taskId}`);
-		}
-	};
-}
-
-function startComprehensiveFileTracking(win, taskId, token) {
-	console.log(`🎯 Starting COMPREHENSIVE file tracking for task: ${taskId}`);
-	
-	const trackedFiles = new Set();
-	const monitors = [];
-	
-	// Start all monitoring methods
-	monitors.push(startPowerShellMonitor(win, taskId, token, trackedFiles));
-	monitors.push(startActiveWindowMonitor(win, taskId, token, trackedFiles));
-	monitors.push(startEnhancedRecentMonitor(win, taskId, token, trackedFiles));
 	
 	return {
 		stop: async () => {
-			console.log(`🛑 Stopping ALL monitors for task: ${taskId}`);
-			monitors.forEach(monitor => monitor.stop());
-			console.log(`✅ All monitors stopped for task: ${taskId}`);
+			isActive = false;
+			clearInterval(interval);
+			console.log(`🛑 Stopped file tracking for task: ${taskId}`);
 		}
 	};
 }
@@ -349,7 +251,7 @@ function startComprehensiveFileTracking(win, taskId, token) {
 function registerIpcHandlers(win) {
 	ipcMain.handle('task:start', async (_e, { taskId, token }) => {
 		try {
-			console.log(`🎬 STARTING comprehensive file tracking for task: ${taskId}`);
+			console.log(`🎬 STARTING file tracking for task: ${taskId}`);
 			
 			// Stop existing monitor if any
 			if (activeMonitors.has(taskId)) {
@@ -357,10 +259,10 @@ function registerIpcHandlers(win) {
 				await activeMonitors.get(taskId).stop();
 			}
 			
-			const monitor = startComprehensiveFileTracking(win, taskId, token);
+			const monitor = startSimpleFileTracking(win, taskId, token);
 			activeMonitors.set(taskId, monitor);
 			
-			console.log(`✅ Successfully started comprehensive tracking for task: ${taskId}`);
+			console.log(`✅ Successfully started tracking for task: ${taskId}`);
 			return { ok: true };
 		} catch (e) {
 			console.error(`❌ Error starting task monitoring:`, e);
@@ -390,6 +292,31 @@ function registerIpcHandlers(win) {
 			await new Promise(r => setTimeout(r, 250)); 
 		}
 		return { ok: true };
+	});
+
+	// Manual file picker for testing
+	ipcMain.handle('task:pickAndTrack', async (_e, { taskId, token }) => {
+		const { dialog } = require('electron');
+		try {
+			const result = await dialog.showOpenDialog(win, {
+				properties: ['openFile', 'multiSelections'],
+				title: 'Select files to track for this task'
+			});
+			
+			if (!result.canceled && result.filePaths) {
+				console.log(`📁 Manual file selection: ${result.filePaths.length} files`);
+				for (const filePath of result.filePaths) {
+					console.log(`✅ Manually tracking: ${filePath}`);
+					win.webContents.send('task:fileTracked', { taskId, path: filePath });
+					await postTrack(taskId, token, filePath);
+				}
+				return { ok: true, count: result.filePaths.length };
+			}
+			return { ok: true, count: 0 };
+		} catch (error) {
+			console.error('Error in manual file picker:', error);
+			return { ok: false, error: String(error) };
+		}
 	});
 }
 

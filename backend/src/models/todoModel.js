@@ -11,7 +11,9 @@ const taskSchema = new mongoose.Schema(
         files: [
             {
                 path: { type: String, required: true },
-                lastOpened: { type: Date, default: Date.now }
+                lastOpened: { type: Date, default: Date.now },
+                lastAccessed: { type: Date, default: Date.now },
+                isActive: { type: Boolean, default: true }
             }
         ]
     },

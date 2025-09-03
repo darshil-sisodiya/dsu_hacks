@@ -5,6 +5,7 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { FaTasks, FaFileAlt, FaRegStickyNote, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
 import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume } from "../lib/todos";
 import { poppins } from "../fonts";
+import SessionRestoreDialog from "./SessionRestoreDialog";
 
 declare global {
   interface Window {
@@ -12,6 +13,7 @@ declare global {
       start: (taskId: string, token: string) => Promise<any>;
       end: (taskId: string) => Promise<any>;
       resumeOpen: (taskId: string, files: Array<{ path: string } | string>) => Promise<any>;
+      pickAndTrack: (taskId: string, token: string) => Promise<any>;
       onFileTracked: (callback: (event: any, data: { taskId: string; path: string }) => void) => void;
     };
   }
@@ -26,6 +28,9 @@ export default function TodoDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [recentFiles, setRecentFiles] = useState<Array<{ path: string; lastOpened?: string }>>([]);
+  const [newFileNotification, setNewFileNotification] = useState<string | null>(null);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [restoreData, setRestoreData] = useState<any>(null);
   const [taskPosition, setTaskPosition] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const selected = useMemo(() => todos.find(t => t._id === selectedId) || null, [todos, selectedId]);
@@ -63,8 +68,49 @@ export default function TodoDashboard() {
     }
   }
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => { 
+    refresh(); 
+    
+    // Set up file tracking event listener once when component mounts
+    if (window.taskAPI?.onFileTracked) {
+      const handleFileTracked = (event: any, data: { taskId: string; path: string }) => {
+        console.log('📁 File tracked event received:', data);
+        
+        // Show notification
+        const fileName = data.path.split('\\').pop() || data.path;
+        setNewFileNotification(`📁 Tracked: ${fileName}`);
+        setTimeout(() => setNewFileNotification(null), 3000);
+        
+        // Always refresh recent files for the tracked task
+        loadRecent(data.taskId);
+        
+        // Also update the recentFiles state immediately if it's the selected task
+        if (selectedId === data.taskId) {
+          console.log('🔄 Updating recent files for currently selected task');
+          setRecentFiles(prev => {
+            // Add the new file if it's not already in the list
+            const exists = prev.some(f => f.path === data.path);
+            if (!exists) {
+              return [...prev, { path: data.path, lastOpened: new Date().toISOString() }];
+            }
+            return prev;
+          });
+        }
+      };
+      
+      window.taskAPI.onFileTracked(handleFileTracked);
+      console.log('✅ File tracking event listener set up');
+    }
+  }, [selectedId]); // Include selectedId as dependency
+  
   useEffect(() => { if (selectedId) loadRecent(selectedId); }, [selectedId]);
+  
+  // Update recent files when active task changes
+  useEffect(() => {
+    if (activeTaskId) {
+      loadRecent(activeTaskId);
+    }
+  }, [activeTaskId]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -107,17 +153,17 @@ const handleLogout = () => {
 
 
   async function onStartTask(taskId: string) {
-    setActiveTaskId(taskId);
     const token = localStorage.getItem('auth_token');
     if (!token) {
       setError('No authentication token found. Please login again.');
       return;
     }
+    
     if (window.taskAPI) {
+      console.log('🎬 Starting task:', taskId);
       await window.taskAPI.start(taskId, token);
-      window.taskAPI.onFileTracked((_, data) => {
-        if (data.taskId === taskId) loadRecent(taskId);
-      });
+      setActiveTaskId(taskId);
+      console.log('✅ Task started, activeTaskId set to:', taskId);
     }
   }
 
@@ -129,10 +175,57 @@ const handleLogout = () => {
   async function onResume(taskId: string) {
     try {
       const r = await getResume(taskId);
+      
+      if (r.files && r.files.length > 0) {
+        // Show the restore dialog
+        setRestoreData({
+          taskId,
+          taskTitle: r.title || selected?.title || 'Unknown Task',
+          files: r.files,
+          lastSession: r.lastSession,
+          totalFiles: r.totalFiles
+        });
+        setShowRestoreDialog(true);
+      } else {
+        setError('No files found for this task session.');
+      }
+      
+      // Update recent files display
       setRecentFiles(r.files || []);
-      if (window.taskAPI) await window.taskAPI.resumeOpen(taskId, r.files || []);
     } catch (e) {
       console.error(e);
+      setError('Failed to load session files.');
+    }
+  }
+
+  async function onRestoreFiles(selectedFilePaths: string[]) {
+    if (!restoreData || !window.taskAPI) return;
+    
+    try {
+      console.log(`🔄 Restoring ${selectedFilePaths.length} files for task ${restoreData.taskId}`);
+      
+      // Open each selected file
+      const filesToOpen = selectedFilePaths.map(path => ({ path }));
+      await window.taskAPI.resumeOpen(restoreData.taskId, filesToOpen);
+      
+      console.log(`✅ Successfully opened ${selectedFilePaths.length} files`);
+    } catch (error) {
+      console.error('Error restoring files:', error);
+      setError('Failed to open some files.');
+    }
+  }
+
+  async function onTestFileTracking(taskId: string) {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setError('No authentication token found. Please login again.');
+      return;
+    }
+    
+    if (window.taskAPI) {
+      console.log('🧪 Testing file tracking with manual picker');
+      const result = await window.taskAPI.pickAndTrack(taskId, token);
+      console.log('🧪 Test result:', result);
     }
   }
 
@@ -200,6 +293,17 @@ const handleLogout = () => {
           {error}
         </motion.div>
       )}
+      
+      {newFileNotification && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="px-6 py-2 text-sm text-green-600 bg-green-50 border-l-4 border-green-400 z-20 relative"
+        >
+          {newFileNotification}
+        </motion.div>
+      )}
 
       <motion.main className="grid grid-cols-1 md:grid-cols-3 gap-6 p-6 relative z-20 items-start" initial="hidden" animate="show" variants={mainVariants}>
         
@@ -207,7 +311,7 @@ const handleLogout = () => {
         <motion.div variants={panelVariants} className="bg-white rounded-2xl shadow-md p-6 border border-gray-200 transition-all">
           <h2 className="flex items-center gap-2 text-gray-700 text-sm font-semibold mb-4"><FaTasks className="text-gray-600" /> Your Tasks</h2>
           {loading ? <p className="text-gray-400">Loading...</p> : (
-            <ul className="space-y-3">
+          <ul className="space-y-3">
               {todos.map(todo => {
                 const isActive = activeTaskId === todo._id;
                 return (
@@ -232,7 +336,7 @@ const handleLogout = () => {
                   </motion.li>
                 );
               })}
-            </ul>
+          </ul>
           )}
         </motion.div>
 
@@ -252,7 +356,12 @@ const handleLogout = () => {
                     <p className="break-words">{selected.description}</p>
                   </div>
                 )}
-                <button onClick={() => onResume(selected._id)} className="px-4 py-2 rounded-xl bg-gray-700 text-white hover:opacity-90 shadow-sm">Resume</button>
+                <div className="flex gap-2">
+                  <button onClick={() => onResume(selected._id)} className="px-4 py-2 rounded-xl bg-gray-700 text-white hover:opacity-90 shadow-sm">Resume</button>
+                  {activeTaskId === selected._id && (
+                    <button onClick={() => onTestFileTracking(selected._id)} className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:opacity-90 shadow-sm text-sm">🧪 Test Track</button>
+                  )}
+                </div>
                 <div className="flex flex-col">
                   <p className="text-xs text-gray-400 mb-2">Recent Files</p>
                   {recentFiles.length === 0 ? <p className="text-gray-400 text-sm">No files yet.</p> :
@@ -282,6 +391,16 @@ const handleLogout = () => {
           </AnimatePresence>
         </motion.div>
       </motion.main>
+
+      {/* Session Restore Dialog */}
+      <SessionRestoreDialog
+        isOpen={showRestoreDialog}
+        onClose={() => setShowRestoreDialog(false)}
+        taskTitle={restoreData?.taskTitle || ''}
+        files={restoreData?.files || []}
+        lastSession={restoreData?.lastSession}
+        onRestore={onRestoreFiles}
+      />
     </div>
   );
 }
