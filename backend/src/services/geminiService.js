@@ -25,7 +25,7 @@ async function summarizeFile(filePath) {
 
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
-        const prompt = `Summarize the following text in clear, concise plain language:\n\n${trimmedContent}`;
+        const prompt = `Provide a brief, concise summary of the following text in 2-3 sentences maximum. Focus on the main purpose, key functionality, or essential content:\n\n${trimmedContent}`;
         const result = await model.generateContent(prompt);
 
         return result.response.text();

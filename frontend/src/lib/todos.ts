@@ -12,7 +12,7 @@ export type Todo = {
 	files?: Array<{ path: string; lastOpened?: string }>;
 };
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
 	if (typeof window !== 'undefined') {
 		const token = localStorage.getItem('auth_token');
 		return token ? { Authorization: `Bearer ${token}` } : {};
@@ -67,5 +67,11 @@ export async function trackFile(taskId: string, filePath: string): Promise<Todo>
 export async function getResume(taskId: string): Promise<{ taskId: string; title: string; files: Array<{ path: string; lastOpened: string }>}> {
 	const res = await fetch(`${getApiBaseUrl()}/api/todos/${taskId}/resume`, { headers: { ...authHeaders() } });
 	if (!res.ok) throw new Error('Failed to fetch resume files');
+	return res.json();
+}
+
+export async function getSummary(taskId: string): Promise<{ taskId: string; summaries: Array<{ file: string; summary: string }> }> {
+	const res = await fetch(`${getApiBaseUrl()}/api/todos/${taskId}/files/summary`, { headers: { ...authHeaders() } });
+	if (!res.ok) throw new Error('Failed to fetch task summary');
 	return res.json();
 }
