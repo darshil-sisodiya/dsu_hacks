@@ -7,3 +7,7 @@ contextBridge.exposeInMainWorld('taskAPI', {
 	pickAndTrack: (taskId, token) => ipcRenderer.invoke('task:pickAndTrack', { taskId, token }),
 	onFileTracked: (callback) => ipcRenderer.on('task:fileTracked', callback),
 });
+
+contextBridge.exposeInMainWorld('electronAPI', {
+	openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+});

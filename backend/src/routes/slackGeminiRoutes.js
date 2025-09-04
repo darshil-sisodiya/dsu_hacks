@@ -164,28 +164,23 @@ router.get("/channel-overview", async (req, res) => {
 /**
  * GET /api/slack-gemini/keyword-search
  * Search Slack messages by keywords and get AI summary
+ * If no channel specified, searches across all channels the bot is in
  */
 router.get("/keyword-search", async (req, res) => {
-    const { keywords, channel, channelName = "Slack" } = req.query;
+    const { keywords, channel, channelName } = req.query;
     
     if (!keywords) {
         return res.status(400).json({ 
             error: "Missing keywords parameter", 
-            example: "/api/slack-gemini/keyword-search?keywords=pandas&channel=C123456&channelName=General" 
-        });
-    }
-
-    if (!channel) {
-        return res.status(400).json({ 
-            error: "Missing channel id", 
-            example: "/api/slack-gemini/keyword-search?keywords=pandas&channel=C123456&channelName=General" 
+            example: "/api/slack-gemini/keyword-search?keywords=pandas (searches all channels) or ?keywords=pandas&channel=C123456&channelName=General (specific channel)" 
         });
     }
 
     try {
-        console.log(`🔍 Searching messages with keywords: "${keywords}" in channel: ${channel} (${channelName})`);
+        const searchChannelName = channelName || (channel ? "Specific Channel" : "All Bot Channels");
+        console.log(`🔍 Searching messages with keywords: "${keywords}" ${channel ? `in channel: ${channel} (${searchChannelName})` : 'across all bot channels'}`);
         
-        const result = await integrationService.searchMessagesByKeywords(keywords, channel, channelName);
+        const result = await integrationService.searchMessagesByKeywords(keywords, channel, searchChannelName);
         
         res.json({
             success: true,

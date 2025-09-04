@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FaSearch, FaComments, FaSpinner, FaExclamationTriangle, FaRegLightbulb, FaTimes } from "react-icons/fa";
+import { FaSearch, FaComments, FaSpinner, FaExclamationTriangle, FaRegLightbulb, FaTimes, FaSlack, FaPlus, FaCopy } from "react-icons/fa";
 import { searchSlackMessagesByKeywords } from "../lib/slackKeywordSearch";
 
 interface SlackSummaryResult {
@@ -11,11 +11,17 @@ interface SlackSummaryResult {
   messageCount: number;
   channelName: string;
   aiSummary: string;
+  channelBreakdown?: Array<{
+    channelId: string;
+    channelName: string;
+    messageCount: number;
+  }>;
   messages: Array<{
     text: string;
     user: string;
     timestamp: string;
     channel: string;
+    channelId?: string;
   }>;
   timestamp: string;
 }
@@ -30,6 +36,62 @@ const SlackKeywordSearch: React.FC<SlackKeywordSearchProps> = ({ isOpen, onClose
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SlackSummaryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleAddBotToWorkspace = () => {
+    const redirectUri = encodeURIComponent("http://localhost:3000/slack/oauth/callback");
+    const slackOAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=9438764751751.9454195793846&scope=channels:history,channels:read,chat:write,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,team:read&user_scope=team:read&redirect_uri=${redirectUri}`;
+    
+    console.log('🔗 Opening Slack OAuth URL in external browser:', slackOAuthUrl);
+    
+    // Method 1: Try Electron's shell.openExternal if available
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
+      console.log('📱 Detected Electron environment - using shell.openExternal');
+      try {
+        (window as any).electronAPI.openExternal(slackOAuthUrl);
+        return;
+      } catch (error) {
+        console.error('❌ Electron openExternal failed:', error);
+      }
+    }
+    
+    // Method 2: Force open in external browser using a more aggressive approach
+    try {
+      // Create a temporary link element and click it
+      const link = document.createElement('a');
+      link.href = slackOAuthUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      console.log('✅ Successfully opened via temporary link element');
+      return;
+    } catch (error) {
+      console.error('❌ Temporary link method failed:', error);
+    }
+    
+    // Method 3: Fallback to window.open
+    console.log('🌐 Using window.open with _blank target');
+    const newWindow = window.open(slackOAuthUrl, '_blank', 'noopener,noreferrer');
+    
+    if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
+      // Method 4: Last resort - navigate current window
+      console.log('⚠️ All methods failed, navigating current window');
+      window.location.href = slackOAuthUrl;
+    }
+  };
+
+  const copyOAuthUrlToClipboard = async () => {
+    const redirectUri = encodeURIComponent("http://localhost:3000/slack/oauth/callback");
+    const slackOAuthUrl = `https://slack.com/oauth/v2/authorize?client_id=9438764751751.9454195793846&scope=channels:history,channels:read,chat:write,groups:history,groups:read,im:history,im:read,mpim:history,mpim:read,users:read,team:read&user_scope=team:read&redirect_uri=${redirectUri}`;
+    
+    try {
+      await navigator.clipboard.writeText(slackOAuthUrl);
+      alert('OAuth URL copied to clipboard! Paste it in your browser to install the bot.');
+    } catch (error) {
+      prompt('Copy this URL and paste it in your browser:', slackOAuthUrl);
+    }
+  };
 
   const handleSearch = async () => {
     if (!keyword.trim()) return;
@@ -100,6 +162,30 @@ const SlackKeywordSearch: React.FC<SlackKeywordSearchProps> = ({ isOpen, onClose
 
         {/* Search Input */}
         <div className="p-6 border-b border-slate-200">
+          {/* Add Bot Buttons */}
+          <div className="mb-4 flex flex-col sm:flex-row gap-3 justify-center">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleAddBotToWorkspace}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2"
+            >
+              <FaSlack className="text-lg" />
+              <FaPlus className="text-sm" />
+              Add Bot to Your Workspace
+            </motion.button>
+            
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={copyOAuthUrlToClipboard}
+              className="px-4 py-3 bg-slate-600 text-white rounded-lg font-medium shadow-lg hover:bg-slate-700 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <FaCopy className="text-sm" />
+              Copy Install Link
+            </motion.button>
+          </div>
+          
           <div className="flex gap-3">
             <div className="flex-1 relative">
               <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
@@ -161,10 +247,15 @@ const SlackKeywordSearch: React.FC<SlackKeywordSearchProps> = ({ isOpen, onClose
               >
                 <FaRegLightbulb className="text-5xl text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-900 mb-2">Search Slack Messages</h3>
-                <p className="text-slate-600 max-w-md mx-auto">
-                  Enter keywords to find and get AI summaries of relevant Slack messages. 
+                <p className="text-slate-600 max-w-md mx-auto mb-4">
+                  Enter keywords to find and get AI summaries of relevant Slack messages across all channels the bot is in. 
                   For example, try "pandas", "python file", or "deadline".
                 </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                  <p className="text-blue-800 text-sm">
+                    <strong>First time?</strong> Click "Add Bot to Your Workspace" above to install the contextFlowBot to your Slack workspace first.
+                  </p>
+                </div>
               </motion.div>
             )}
 
@@ -177,7 +268,7 @@ const SlackKeywordSearch: React.FC<SlackKeywordSearchProps> = ({ isOpen, onClose
                 <FaSpinner className="text-4xl text-blue-600 mx-auto mb-4 animate-spin" />
                 <h3 className="text-lg font-medium text-slate-900 mb-2">Searching...</h3>
                 <p className="text-slate-600">
-                  Analyzing Slack messages for keyword: "{keyword}"
+                  Analyzing Slack messages across all bot channels for keyword: "{keyword}"
                 </p>
               </motion.div>
             )}
@@ -200,10 +291,27 @@ const SlackKeywordSearch: React.FC<SlackKeywordSearchProps> = ({ isOpen, onClose
                       <span className="font-medium text-blue-900 ml-2">{results.messageCount}</span>
                     </div>
                     <div>
-                      <span className="text-blue-700">Channel:</span>
+                      <span className="text-blue-700">Search scope:</span>
                       <span className="font-medium text-blue-900 ml-2">{results.channelName}</span>
                     </div>
                   </div>
+                  
+                  {/* Channel Breakdown */}
+                  {results.channelBreakdown && results.channelBreakdown.length > 1 && (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <span className="text-blue-700 text-sm font-medium">Found in channels:</span>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {results.channelBreakdown.map((channel, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                          >
+                            #{channel.channelName}: {channel.messageCount}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* AI Summary */}
