@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
-import { FaTasks, FaPlus, FaSearch, FaSignOutAlt, FaUser, FaCheck, FaComments } from "react-icons/fa";
+import { FaTasks, FaPlus, FaSearch,FaArrowLeft, FaSignOutAlt, FaUser, FaCheck, FaComments } from "react-icons/fa";
 import { listTodos, createTodo, updateTodo, deleteTodo, type Todo, getResume, getSummary } from "../lib/todos";
 import { poppins } from "../fonts";
 import TaskList from "./TaskList";
@@ -345,14 +345,24 @@ export default function TodoDashboard() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
-                <FaTasks className="text-white text-lg" />
-              </div>
-              <div>
-                <h1 className="text-xl font-black text-slate-900">Task Manager</h1>
-                <p className="text-sm text-slate-600 font-medium">Organize your workflow</p>
-              </div>
-            </div>
+  {/* Back Button */}
+  <button
+    onClick={() => window.history.back()}
+    className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-all flex items-center justify-center"
+  >
+    <FaArrowLeft className="text-slate-700 text-lg" />
+  </button>
+
+  {/* App Icon & Name */}
+  <div className="w-10 h-10 bg-slate-900 rounded-lg flex items-center justify-center">
+    <FaTasks className="text-white text-lg" />
+  </div>
+  <div>
+    <h1 className="text-xl font-black text-slate-900">Context<span className="text-blue-600">Flow</span></h1>
+    <p className="text-sm text-slate-600 font-medium">Organize your workflow</p>
+  </div>
+</div>
+
             
             <div className="flex items-center gap-4">
               {/* Search */}
