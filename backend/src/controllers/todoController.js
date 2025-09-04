@@ -3,6 +3,7 @@ const todoService = require("../services/todoService");
 // controllers/todoController.js
 const Todo = require("../models/todoModel");
 const { summarizeFile } = require("../services/geminiService");
+const Counter = require("../models/Counter");
 
 // ✅ NEW: summarize recent file for a task
 exports.summarizeAllFiles = async (req, res) => {
@@ -104,15 +105,27 @@ exports.getTodoById = async (req, res) => {
 };
 
 // Create todo
+// Create todo
 exports.createTodo = async (req, res) => {
-    try {
-        const todo = await todoService.createTodoForUser(req.user._id, req.body);
-        console.log(`todo stored: ${todo._id} - ${todo.title}`);
-        res.status(201).json(todo);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+  try {
+    // 1️⃣ Create the todo
+    const todo = await todoService.createTodoForUser(req.user._id, req.body);
+    console.log(`todo stored: ${todo._id} - ${todo.title}`);
+
+    // 2️⃣ Increment user's timeSaved by 2 minutes
+    await Counter.findOneAndUpdate(
+      { userId: req.user._id },
+      { $inc: { timeSaved: 2 } }, // increment by 2 minutes
+      { new: true, upsert: true } // create counter doc if it doesn't exist
+    );
+
+    // 3️⃣ Respond with the created todo
+    res.status(201).json(todo);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 };
+
 
 // Update todo
 exports.updateTodo = async (req, res) => {

@@ -25,12 +25,12 @@ export default function LoginSignup() {
         const res = await apiLogin({ email, password });
         localStorage.setItem("auth_token", res.token);
         localStorage.setItem("auth_user", JSON.stringify(res.user));
-        router.push("/tasks");
+        router.push("/home");
       } else {
         const res = await apiSignup({ name, email, password });
         localStorage.setItem("auth_token", res.token);
         localStorage.setItem("auth_user", JSON.stringify(res.user));
-        router.push("/tasks");
+        router.push("/");
       }
     } catch (err: any) {
       setMessage(err?.message || "Something went wrong");
