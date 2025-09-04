@@ -22,7 +22,7 @@ export interface SlackKeywordSearchResult {
 /**
  * Search Slack messages by keywords and get AI summary
  * This function will search for messages containing the specified keywords
- * and return an AI-generated summary of the relevant conversations
+ * If no channel is specified, it searches across all channels the bot is in
  */
 export async function searchSlackMessagesByKeywords(
   keywords: string,
@@ -30,16 +30,18 @@ export async function searchSlackMessagesByKeywords(
   channelName?: string
 ): Promise<SlackKeywordSearchResult> {
   try {
-    // Default to a common channel if not specified
-    const targetChannelId = channelId || 'C09DR4X74TB'; // Your workspace channel
-    const targetChannelName = channelName || 'General';
-
     // Build query parameters
     const queryParams = new URLSearchParams({
-      keywords: keywords.trim(),
-      channel: targetChannelId,
-      channelName: targetChannelName
+      keywords: keywords.trim()
     });
+
+    // Add channel parameters only if specified
+    if (channelId) {
+      queryParams.append('channel', channelId);
+    }
+    if (channelName) {
+      queryParams.append('channelName', channelName);
+    }
 
     const response = await fetch(
       `${getApiBaseUrl()}/api/slack-gemini/keyword-search?${queryParams}`,

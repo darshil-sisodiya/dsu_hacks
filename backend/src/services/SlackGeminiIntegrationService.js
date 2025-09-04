@@ -1,4 +1,4 @@
-const { getSlackTasks, fetchSlackMessages } = require("../../Slackservice");
+const { getSlackTasks, fetchSlackMessages, getBotChannels, fetchAllSlackMessages, getAllSlackTasks } = require("../../Slackservice");
 const SlackSummaryService = require("./SlackSummaryService");
 
 /**
@@ -175,19 +175,31 @@ class SlackGeminiIntegrationService {
         }
     }
     /**
-     * Search Slack messages by keywords and get AI summary
+     * Search Slack messages by keywords across all channels and get AI summary
      * @param {string} keywords - Keywords to search for
-     * @param {string} channelId - Slack channel ID
+     * @param {string} channelId - Slack channel ID (optional, if provided searches only that channel)
      * @param {string} channelName - Human-readable channel name (optional)
      * @returns {Promise<Object>} - Filtered messages with AI summary
      */
-    async searchMessagesByKeywords(keywords, channelId, channelName = "Slack") {
+    async searchMessagesByKeywords(keywords, channelId = null, channelName = "All Channels") {
         try {
-            console.log(`🔍 Searching for keywords: "${keywords}" in channel: ${channelId}`);
+            console.log(`🔍 Searching for keywords: "${keywords}" ${channelId ? `in channel: ${channelId}` : 'across all channels'}`);
             
-            // Fetch all messages from the channel
-            const allMessages = await fetchSlackMessages(channelId);
-            console.log(`📨 Fetched ${allMessages.length} total messages from ${channelName}`);
+            let allMessages = [];
+            let searchScope = "";
+            
+            if (channelId) {
+                // Search in specific channel
+                allMessages = await fetchSlackMessages(channelId);
+                searchScope = channelName;
+                console.log(`📨 Fetched ${allMessages.length} total messages from ${channelName}`);
+            } else {
+                // Search across all channels
+                const { messages, channels } = await fetchAllSlackMessages();
+                allMessages = messages;
+                searchScope = `All Bot Channels (${channels.length} channels)`;
+                console.log(`📨 Fetched ${allMessages.length} total messages from ${channels.length} channels`);
+            }
             
             // Filter messages that contain the keywords (case-insensitive)
             const keywordArray = keywords.toLowerCase().split(/[,\s]+/).filter(k => k.length > 0);
@@ -200,32 +212,60 @@ class SlackGeminiIntegrationService {
             
             if (filteredMessages.length === 0) {
                 return {
-                    channelId,
-                    channelName,
+                    channelId: channelId || 'all',
+                    channelName: searchScope,
                     keyword: keywords,
                     messageCount: 0,
                     messages: [],
-                    aiSummary: `No messages found containing the keywords: "${keywords}". Try different keywords or check if the channel has recent activity.`,
+                    aiSummary: `No messages found containing the keywords: "${keywords}". Try different keywords or check if there's recent activity in the channels.`,
                     timestamp: new Date().toISOString()
                 };
             }
             
-            // Generate AI summary for the filtered messages
+            // Group results by channel for better context
+            const messagesByChannel = {};
+            filteredMessages.forEach(msg => {
+                const chId = msg.channelId || msg.channel || 'unknown';
+                const chName = msg.channelName || 'Unknown Channel';
+                if (!messagesByChannel[chId]) {
+                    messagesByChannel[chId] = {
+                        channelName: chName,
+                        messages: []
+                    };
+                }
+                messagesByChannel[chId].messages.push(msg);
+            });
+            
+            // Generate AI summary for the filtered messages with channel context
+            let summaryContext = searchScope;
+            if (Object.keys(messagesByChannel).length > 1) {
+                const channelSummary = Object.entries(messagesByChannel)
+                    .map(([chId, data]) => `#${data.channelName}: ${data.messages.length} messages`)
+                    .join(', ');
+                summaryContext += ` (${channelSummary})`;
+            }
+            
             const summary = await this.summaryService.summarizeConversation(
                 filteredMessages, 
-                `${channelName} - Keyword Search: "${keywords}"`
+                `${summaryContext} - Keyword Search: "${keywords}"`
             );
             
             return {
-                channelId,
-                channelName,
+                channelId: channelId || 'all',
+                channelName: searchScope,
                 keyword: keywords,
                 messageCount: filteredMessages.length,
+                channelBreakdown: Object.entries(messagesByChannel).map(([chId, data]) => ({
+                    channelId: chId,
+                    channelName: data.channelName,
+                    messageCount: data.messages.length
+                })),
                 messages: filteredMessages.map(msg => ({
                     text: msg.text,
                     user: msg.user || 'unknown',
                     timestamp: msg.ts ? new Date(parseFloat(msg.ts) * 1000).toISOString() : new Date().toISOString(),
-                    channel: msg.channel || channelId
+                    channel: msg.channelName || msg.channel || (msg.channelId || 'unknown'),
+                    channelId: msg.channelId || msg.channel || 'unknown'
                 })),
                 aiSummary: summary,
                 timestamp: new Date().toISOString()

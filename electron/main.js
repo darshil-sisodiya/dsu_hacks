@@ -476,6 +476,18 @@ function startAdvancedFileTracking(win, taskId, token) {
 }
 
 function registerIpcHandlers(win) {
+	// Shell operations
+	ipcMain.handle('shell:openExternal', async (_e, url) => {
+		try {
+			console.log(`🌐 Opening external URL: ${url}`);
+			await shell.openExternal(url);
+			return { ok: true };
+		} catch (error) {
+			console.error(`❌ Error opening external URL: ${url}`, error);
+			return { ok: false, error: String(error) };
+		}
+	});
+
 	ipcMain.handle('task:start', async (_e, { taskId, token }) => {
 		try {
 			console.log(`🎬 STARTING file tracking for task: ${taskId}`);

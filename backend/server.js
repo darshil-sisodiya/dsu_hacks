@@ -8,7 +8,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const todoRoutes = require('./src/routes/TodoRoutes'); 
 const slackRoutes = require('./src/routes/slackRoutes'); // ✅ Import Slack routes
 const slackGeminiRoutes = require('./src/routes/slackGeminiRoutes'); // 🚀 Import Slack-Gemini integration routes
-const counterRoutes = require('./src/routes/counterRoutes');
+const slackOAuthRoutes = require('./src/routes/slackOAuthRoutes'); // 🔐 Import Slack OAuth routes
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,8 +26,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/todos', todoRoutes); 
 app.use('/api/slack', slackRoutes); // ✅ Mount Slack routes
 app.use('/api/slack-gemini', slackGeminiRoutes); // 🚀 Mount Slack-Gemini integration routes
-app.use('/api/counter', counterRoutes);
-
+app.use('/api/slack/oauth', slackOAuthRoutes); // 🔐 Mount Slack OAuth routes
 
 // Health check route
 app.get('/health', (req, res) => {
