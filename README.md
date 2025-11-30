@@ -1,6 +1,4 @@
-Here’s a **24-hour Hackathon MVP plan** for your **Electron-based context-aware Todo App** with **auto file restoration** and **session summarizer**:
 
----
 
 ## ✅ **Goals for MVP**
 
